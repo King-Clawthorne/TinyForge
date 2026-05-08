@@ -1,7 +1,7 @@
-# Fill-Transformer
+# Cohen-Transformer
 
 ## Situation
-Fill-Transformer is a compact PyTorch-based transformer language model implementation designed for efficient autoregressive generation and training. It includes a simple decoder-only model, rotary position embeddings, RMS normalization, and training utilities for tokenizer management and checkpointing.
+Cohen-Transformer is a compact PyTorch-based transformer language model implementation designed for efficient autoregressive generation and training. It includes a simple decoder-only model, rotary position embeddings, RMS normalization, and training utilities for tokenizer management and checkpointing.
 
 ## Task
 The goal is to provide a clear, concise project overview and usage guide that helps a developer understand what this code does, how it is structured, and how to run or extend it.
