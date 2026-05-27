@@ -395,7 +395,7 @@ def main():
     parser.add_argument("--tokenizer-path", type=str, default="fineweb_edu_bpe.json",
                         help="Path to cache the trained BPE tokenizer.")
     parser.add_argument("--compile-mode", type=str,   default="max-autotune",
-                        choices=["default", "reduce-overhead", "max-autotune"],
+                        choices=["default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"],
                         help="torch.compile mode. max-autotune is best for Blackwell long runs "
                              "but adds ~5-10 min warmup on the first step.")
  
