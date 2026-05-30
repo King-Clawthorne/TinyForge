@@ -9,6 +9,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader, IterableDataset, get_worker_info
 
 from torch.optim import Muon
+from torch.nn.attention.flex_attention import flex_attention, create_block_mask
 
 from modules.layers import RMSNorm, RotaryEmbedding, apply_rope
 from modules.utils import load_checkpoint, save_checkpoint, train_or_load_bpe
@@ -116,7 +117,7 @@ class SimpleTransformerLM(nn.Module):
         elif isinstance(module, nn.Embedding):
             nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
-    def forward(self, idx, past_kvs=None, use_cache=False):
+    def forward(self, idx, past_kvs=None, use_cache=False, block_mask=None):
         bsz, seq_len = idx.shape
         if seq_len > self.block_size:
             raise ValueError("Sequence length exceeds block_size")
@@ -147,26 +148,33 @@ class SimpleTransformerLM(nn.Module):
                 k = torch.cat([past_k, k], dim=2)
                 v = torch.cat([past_v, v], dim=2)
 
-            attn_mask = None
-            is_causal = True
-            if past_len > 0:
-                # PyTorch's built-in causal mask for non-square attention is
-                # upper-left aligned, which is wrong for KV-cache decode.
-                # Build the lower-right mask explicitly so each query token can
-                # attend to the entire cache plus earlier tokens in this chunk.
-                total_len = past_len + seq_len
-                query_positions = past_len + torch.arange(seq_len, device=q.device)
-                key_positions = torch.arange(total_len, device=q.device)
-                attn_mask = key_positions.unsqueeze(0) <= query_positions.unsqueeze(1)
-                is_causal = False
+            if block_mask is not None:
+                # Training / eval: FlexAttention with a per-document
+                # block-diagonal causal mask so tokens never attend across
+                # <|endoftext|> boundaries within a packed sequence. qk_gain is
+                # already folded into q, so the scalar `scale` matches SDPA.
+                y = flex_attention(q, k, v, block_mask=block_mask, scale=self.scale)
+            else:
+                attn_mask = None
+                is_causal = True
+                if past_len > 0:
+                    # PyTorch's built-in causal mask for non-square attention is
+                    # upper-left aligned, which is wrong for KV-cache decode.
+                    # Build the lower-right mask explicitly so each query token can
+                    # attend to the entire cache plus earlier tokens in this chunk.
+                    total_len = past_len + seq_len
+                    query_positions = past_len + torch.arange(seq_len, device=q.device)
+                    key_positions = torch.arange(total_len, device=q.device)
+                    attn_mask = key_positions.unsqueeze(0) <= query_positions.unsqueeze(1)
+                    is_causal = False
 
-            y = F.scaled_dot_product_attention(
-                q, k, v,
-                attn_mask=attn_mask,
-                dropout_p=0.0,
-                is_causal=is_causal,
-                scale=self.scale,
-            )
+                y = F.scaled_dot_product_attention(
+                    q, k, v,
+                    attn_mask=attn_mask,
+                    dropout_p=0.0,
+                    is_causal=is_causal,
+                    scale=self.scale,
+                )
 
             y = y.permute(0, 2, 1, 3).contiguous().view(bsz, seq_len, self.n_embd)
             y = self.proj[layer](y)
@@ -250,9 +258,10 @@ class SimpleTransformerLM(nn.Module):
                 # Top-P (nucleus)
                 if top_p is not None and 0.0 < top_p < 1.0:
                     sorted_logits, sorted_idx = torch.sort(logits, dim=-1, descending=True)
-                    cumprobs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
+                    softmax_logits = F.softmax(sorted_logits, dim=-1)
+                    cumprobs = torch.cumsum(softmax_logits, dim=-1)
                     # Shift right so the token that pushes cumsum over p is kept
-                    sorted_remove = cumprobs - F.softmax(sorted_logits, dim=-1) >= top_p
+                    sorted_remove = cumprobs - softmax_logits >= top_p
                     remove = sorted_remove.scatter(1, sorted_idx, sorted_remove)
                     logits = logits.masked_fill(remove, float("-inf"))
  
@@ -371,6 +380,34 @@ class StreamingTokenDataset(IterableDataset):
                 # remains a strict 1-shift of x without re-tokenizing.
                 buf = buf[bs:]
 
+def build_doc_block_mask(tokens, eot_id):
+    """FlexAttention block mask: block-diagonal causal attention per document.
+
+    Packed sequences join FineWeb-Edu docs with <|endoftext|>. Without masking a
+    token attends across that boundary into an unrelated document. This builds a
+    mask where query q attends to key k iff k <= q (causal) AND both lie in the
+    same document.
+
+    Built eagerly each step and passed into the compiled model — the standard
+    FlexAttention pattern (mask creation stays in eager, consumption is fused).
+    """
+    bsz, seq_len = tokens.shape
+    is_eot = (tokens == eot_id).to(torch.int32)
+    # Exclusive cumsum: the <|endoftext|> token keeps the id of the document it
+    # terminates; the first token after it starts the next id.
+    doc_id = is_eot.cumsum(dim=1) - is_eot  # (B, S)
+
+    def doc_causal_mask(b, h, q_idx, kv_idx):
+        causal = q_idx >= kv_idx
+        same_doc = doc_id[b, q_idx] == doc_id[b, kv_idx]
+        return causal & same_doc
+
+    # H=None broadcasts the same mask across all heads.
+    return create_block_mask(
+        doc_causal_mask, bsz, None, seq_len, seq_len, device=tokens.device
+    )
+
+
 def chunked_cross_entropy(logits, targets, chunk_size=8192):
     """Cross-entropy that avoids the full-tensor fp32 upcast inside F.cross_entropy.
 
@@ -390,14 +427,15 @@ def chunked_cross_entropy(logits, targets, chunk_size=8192):
     return total / n
 
 
-def estimate_loss(model, val_loader, vocab_size, device, eval_iters=20):
+def estimate_loss(model, val_loader, device, eot_id, eval_iters=20):
     model.eval()
     losses = []
     with torch.no_grad():
         for i, (xb, yb) in enumerate(val_loader):
             if i >= eval_iters: break
             xb, yb = xb.to(device, non_blocking=True), yb.to(device, non_blocking=True)
-            logits, _ = model(xb, use_cache=False)
+            block_mask = build_doc_block_mask(xb, eot_id)
+            logits, _ = model(xb, use_cache=False, block_mask=block_mask)
             loss = chunked_cross_entropy(logits, yb)
             losses.append(loss.item())
     
@@ -408,37 +446,17 @@ def main():
     parser = argparse.ArgumentParser(description="SimpleTransformerLM — FineWeb-Edu (streaming)")
  
     # Training
-    parser.add_argument("--max-steps",    type=int,   default=9999)
-    parser.add_argument("--batch-size",   type=int,   default=99)
-    parser.add_argument("--block-size",   type=int,   default=2048)
-    parser.add_argument("--checkpoint",   type=str,   default="simple_checkpoint.pt")
-    parser.add_argument("--resume",       action="store_true",
-                        help="Resume training from --checkpoint before running any new steps.")
-    parser.add_argument("--vocab-size",     type=int, default=32768,
-                        help="Custom BPE vocab size. 32k suits general English web text; "
-                             "8k was fine for TinyStories but starves a model on FineWeb-Edu.")
-    parser.add_argument("--tokenizer-path", type=str, default="fineweb_edu_bpe.json",
-                        help="Path to cache the trained BPE tokenizer.")
-    parser.add_argument("--compile-mode", type=str,   default="default",
-                        choices=["default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"],
-                        help="torch.compile mode. max-autotune is best for Blackwell long runs "
-                             "but adds ~5-10 min warmup on the first step.")
- 
-    # Generation
-    parser.add_argument("--temperature",    type=float, default=0.8)
-    parser.add_argument("--top-k",          type=int,   default=None)
-    parser.add_argument("--top-p",          type=float, default=None,
-                        help="Nucleus sampling threshold, e.g. 0.9")
-    parser.add_argument("--min-p",          type=float, default=0.05,
-                        help="Min-P threshold. Good default: 0.05-0.10. "
-                             "Best lever against repetition loops.")
-    parser.add_argument("--repetition-penalty", type=float, default=1.0,
-                        help="Downweight previously generated tokens. Good starting range: 1.05-1.20.")
-    parser.add_argument("--max-new-tokens", type=int,   default=200)
-    parser.add_argument("--prompt",         type=str,   default="Once upon a time",
-                        help="Generation prompt. TinyStories-style prompts work best.")
-    parser.add_argument("--no-sweep",       action="store_true",
-                        help="Skip the sampler comparison sweep and only run --prompt once.")
+    parser.add_argument("--max-steps", type=int, default=9999)
+    parser.add_argument("--batch-size", type=int, default=99)
+    parser.add_argument("--block-size", type=int, default=2048)
+    parser.add_argument("--checkpoint", type=str, default="simple_checkpoint.pt")
+    parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--vocab-size", type=int, default=32768)
+    parser.add_argument("--tokenizer-path", type=str, default="fineweb_edu_bpe.json")
+    parser.add_argument("--compile-mode", type=str, default="default",
+                        choices=["default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"])
+    parser.add_argument("--prompt", type=str, default="Once upon a time ")
+    parser.add_argument("--max-new-tokens", type=int, default=100)
  
     args = parser.parse_args()
  
@@ -487,7 +505,7 @@ def main():
     # process and the OS without causing core contention. Each train worker
     # streams its own shard of FineWeb-Edu so they don't replay docs.
     loader_kwargs = dict(
-        num_workers=12,
+        num_workers=2,
         pin_memory=True,
         persistent_workers=True,
         prefetch_factor=4,
@@ -600,8 +618,9 @@ def main():
         for opt in optimizers:
             opt.zero_grad(set_to_none=True)
 
+        block_mask = build_doc_block_mask(xb, eot_id)
         with autocast_ctx:
-            logits, _ = model(xb, use_cache=False)
+            logits, _ = model(xb, use_cache=False, block_mask=block_mask)
             loss = chunked_cross_entropy(logits, yb)
 
         loss.backward()
@@ -610,7 +629,7 @@ def main():
             opt.step()
 
         if step % eval_interval == 0:
-            val_loss  = estimate_loss(model, val_loader, model.vocab_size, device)
+            val_loss  = estimate_loss(model, val_loader, device, eot_id)
             peak_alloc = torch.cuda.max_memory_allocated() / 1e9 if device == "cuda" else 0.0
             peak_reserved = torch.cuda.max_memory_reserved() / 1e9 if device == "cuda" else 0.0
             if device == "cuda": torch.cuda.reset_peak_memory_stats()
@@ -628,38 +647,17 @@ def main():
     # -------------------------------------------------------------------------
     print("\n--- Generating Sample Text ---\n")
     context = torch.tensor([encode(args.prompt)], device=device)
- 
-    # Check if the user passed any explicit sampling flags
-    user_specified_sampling = (
-        args.top_k is not None or
-        args.top_p is not None or
-        args.min_p != 0.05 or
-        args.repetition_penalty != 1.0  # non-default means user set it explicitly
-    )
- 
-    if args.no_sweep or user_specified_sampling:
-        configs = {
-            "custom": dict(
-                temperature=args.temperature,
-                top_k=args.top_k,
-                top_p=args.top_p,
-                min_p=args.min_p,
-                repetition_penalty=args.repetition_penalty,
-            )
-        }
-    else:
-        # Default: comparison sweep so you can see sampler differences at a glance.
-        print("Default temperature is 0.8")
 
-        configs = {
-            "top_k=40 ":               dict(temperature=0.8, top_k=40,   top_p=None, min_p=None, repetition_penalty=1.1),
-            "top_p=0.9":               dict(temperature=0.8, top_k=None, top_p=0.9,  min_p=None, repetition_penalty=1.1),
-            "min_p=0.05":              dict(temperature=0.8, top_k=None, top_p=None, min_p=0.05, repetition_penalty=1.1),
-            "top_p=0.9 + min_p=0.05":  dict(temperature=0.8, top_k=None, top_p=0.9,  min_p=0.05, repetition_penalty=1.1),
-            "RepPenalty=1.2":          dict(temperature=0.8, top_k=None, top_p=None, min_p=None, repetition_penalty=1.2),
-            "Temp=0.5":                dict(temperature=0.5, top_k=None, top_p=None, min_p=None, repetition_penalty=1.1),
-            "Temp=1.5":                dict(temperature=1.5, top_k=None, top_p=None, min_p=None, repetition_penalty=1.1),
-        }
+    print("Default temperature is 0.8")
+    configs = {
+        "top_k=40 ":               dict(temperature=0.8, top_k=40,   top_p=None, min_p=None, repetition_penalty=1.1),
+        "top_p=0.9":               dict(temperature=0.8, top_k=None, top_p=0.9,  min_p=None, repetition_penalty=1.1),
+        "min_p=0.05":              dict(temperature=0.8, top_k=None, top_p=None, min_p=0.05, repetition_penalty=1.1),
+        "top_p=0.9 + min_p=0.05":  dict(temperature=0.8, top_k=None, top_p=0.9,  min_p=0.05, repetition_penalty=1.1),
+        "RepPenalty=1.2":          dict(temperature=0.8, top_k=None, top_p=None, min_p=None, repetition_penalty=1.2),
+        "Temp=0.5":                dict(temperature=0.5, top_k=None, top_p=None, min_p=None, repetition_penalty=1.1),
+        "Temp=1.5":                dict(temperature=1.5, top_k=None, top_p=None, min_p=None, repetition_penalty=1.1),
+    }
  
     for label, cfg in configs.items():
         print(f"[{label}]")
