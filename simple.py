@@ -418,6 +418,7 @@ def main():
     parser.add_argument("--tokenizer-path", type=str, default="fineweb_edu_bpe.json")
     parser.add_argument("--compile-mode", type=str, default="default",
                         choices=["default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"])
+    parser.add_argument("--eval-interval", type=int, default=999)
     parser.add_argument("--prompt", type=str, default="Once upon a time ")
     parser.add_argument("--max-new-tokens", type=int, default=100)
  
@@ -538,7 +539,7 @@ def main():
     )
 
     max_steps     = args.max_steps
-    eval_interval = 999
+    eval_interval = args.eval_interval
     warmup_steps  = min(99, max(0, max_steps - 1))
 
     def get_lr(step):
