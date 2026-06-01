@@ -27,7 +27,7 @@ Provide a clear, concise project overview and usage guide that helps a developer
 1. Install dependencies:
 
    ```bash
-   pip install -r requirments.txt
+   pip install -r requirements.txt
    ```
 
 2. Train:
@@ -46,4 +46,5 @@ Provide a clear, concise project overview and usage guide that helps a developer
 
 - `simple.py` — model, training loop, FineWeb-Edu streaming dataset, FP8 wiring, cuDNN SDPA path, and generation
 - `modules/layers.py` — `RMSNorm`, `RotaryEmbedding`, `apply_rope`
+- `modules/muon.py` — Muon optimizer implementation
 - `modules/utils.py` — BPE training/loading, checkpoint save/load (single or list of optimizers), dataset helpers

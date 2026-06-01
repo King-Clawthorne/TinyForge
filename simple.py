@@ -434,6 +434,8 @@ def main():
                         choices=["default", "reduce-overhead", "max-autotune"])
     parser.add_argument("--eval-interval", type=int, default=999)
     parser.add_argument("--grad-accum",   type=int, default=1)
+    parser.add_argument("--prompt",       type=str, default="The capital of France")
+    parser.add_argument("--max-new-tokens", type=int, default=100)
 
     args = parser.parse_args()
  
