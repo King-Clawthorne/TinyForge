@@ -22,12 +22,6 @@ from modules.utils import (
     train_or_load_bpe,
 )
 
-import torch._inductor.config as ic
-
-ic.triton.cudagraph_trees = True
-ic.coordinate_descent_tuning = True
-ic.coordinate_descent_check_all_directions = True   # slower compile, more thoroughput
-
 # EPYC 9355: 48 cores / 96 threads. Cap PyTorch + MKL thread pools to avoid
 # contention with DataLoader workers (we use 12 workers below).
 os.environ.setdefault("OMP_NUM_THREADS", "8")
@@ -416,7 +410,7 @@ def main():
     parser.add_argument("--resume",       action="store_true")
     parser.add_argument("--vocab-size",     type=int, default=32768)
     parser.add_argument("--tokenizer-path", type=str, default="fineweb_edu_bpe.json")
-    parser.add_argument("--compile-mode", type=str,   default="max-autotune",
+    parser.add_argument("--compile-mode", type=str,   default="default",
                         choices=["default", "reduce-overhead", "max-autotune"])
     parser.add_argument("--eval-interval", type=int, default=999)
     parser.add_argument("--grad-accum",   type=int, default=1)
@@ -571,9 +565,15 @@ def main():
         nonlocal _ckpt_thread
         if _ckpt_thread is not None and _ckpt_thread.is_alive():
             _ckpt_thread.join()
+        # Move tensors to CPU before deepcopy so the snapshot lives in RAM,
+        # not VRAM — otherwise we'd double peak GPU memory at every checkpoint.
         snapshot = {
-            "model_state_dict": copy.deepcopy(model.state_dict()),
-            "optimizer_state_dicts": [copy.deepcopy(o.state_dict()) for o in optimizers],
+            "model_state_dict": {k: v.cpu() for k, v in model.state_dict().items()},
+            "optimizer_state_dicts": [
+                {k: (v.cpu() if isinstance(v, torch.Tensor) else v)
+                 for k, v in o.state_dict().items()}
+                for o in optimizers
+            ],
             "step": step,
         }
         def _write():
