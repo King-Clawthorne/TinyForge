@@ -391,6 +391,10 @@ def estimate_loss(model, val_loader, device, eval_iters=20):
     with torch.no_grad():
         for i, (xb, yb) in enumerate(val_loader):
             if i >= eval_iters: break
+            # New CUDA-graph step each iteration: we read loss.item() per pass,
+            # so let the graph reuse its static output buffer instead of
+            # clobbering a tensor that may still be referenced.
+            torch.compiler.cudagraph_mark_step_begin()
             xb, yb = xb.to(device, non_blocking=True), yb.to(device, non_blocking=True)
             logits, _ = model(xb, use_cache=False)
             loss = chunked_cross_entropy(logits, yb)
@@ -598,6 +602,13 @@ def main():
     autocast_ctx = torch.amp.autocast(device, dtype=torch.bfloat16, enabled=(device == "cuda"))
  
     while step < max_steps:
+        # CUDA graphs (reduce-overhead / max-autotune) reuse static output
+        # buffers across invocations. We retain references to graphed outputs
+        # past the step boundary (loss.item() at eval, loss accumulated across
+        # micro-steps), so mark the step start to let the graph reclaim and
+        # reuse that memory safely instead of overwriting live tensors.
+        torch.compiler.cudagraph_mark_step_begin()
+
         lr = get_lr(step)
         for opt in optimizers:
             for param_group in opt.param_groups:
