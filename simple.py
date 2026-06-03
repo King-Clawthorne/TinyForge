@@ -633,7 +633,7 @@ def main():
         for opt in optimizers:
             opt.zero_grad(set_to_none=True)
 
-        loss = None
+        loss = 0.0
         for micro_step in range(args.grad_accum):
             if micro_step > 0:
                 try:
@@ -649,7 +649,7 @@ def main():
                 micro_loss = chunked_cross_entropy(logits, yb) / args.grad_accum
 
             micro_loss.backward()
-            loss = micro_loss if loss is None else loss + micro_loss
+            loss += micro_loss.detach()
 
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         for opt in optimizers:
