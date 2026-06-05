@@ -188,11 +188,11 @@ class SimpleTransformerLM(nn.Module):
         logits = self.lm_head(x)
         if self.logit_softcap is not None and self.logit_softcap > 0:
             cap = self.logit_softcap
-            # Fold the softcap in-place: `tanh(logits / cap) * cap` would
-            # allocate two extra full-size (B*T, vocab) temporaries; the in-place
-            # chain mutates the single logits buffer instead. Autograd records
-            # the tanh output, so backward is unaffected.
-            logits = logits.div_(cap).tanh_().mul_(cap)
+            # Fold the softcap to avoid extra full-size (B*T, vocab) temporaries.
+            # div_ and tanh_ run in-place on the logits buffer; the final `* cap`
+            # must stay out-of-place because TanhBackward needs an unmodified
+            # copy of the tanh output for the backward pass.
+            logits = logits.div_(cap).tanh_() * cap
         return logits, new_kvs
 
     @torch.no_grad()
