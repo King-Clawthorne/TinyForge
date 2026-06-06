@@ -422,12 +422,18 @@ def main():
         print(f"GPU : {torch.cuda.get_device_name(0)}")
         print(f"VRAM: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
 
+    # Dataset selection — the single knob for switching corpora. DATASET_PATH
+    # and DATASET_NAME are passed straight to HF `load_dataset(path, name, ...)`,
+    # so any streaming dataset that exposes a "text" column works. Everything
+    # downstream (BPE training, the val split, the streaming loader) reads these
+    # three constants and is otherwise dataset-agnostic.
     DATASET_PATH = "roneneldan/TinyStories"
     DATASET_NAME = None
     DATASET_SPLIT = "train"
  
-    # Train BPE on a sample of the stream — 50k docs (~60M chars) is plenty
-    # for a 32k vocab and avoids materializing the full 10BT shard set.
+    # Train BPE on a bounded sample of the stream — 50k docs is plenty for a
+    # 32k vocab and avoids streaming more shards than the tokenizer needs,
+    # regardless of which dataset is configured above.
     def corpus_iter():
         for ex in stream_dataset(DATASET_PATH, DATASET_NAME, split=DATASET_SPLIT, take=50_000):
             t = ex["text"].strip()
