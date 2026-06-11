@@ -437,7 +437,7 @@ def main():
     parser = argparse.ArgumentParser(description="SimpleTransformerLM")
  
     # Training
-    parser.add_argument("--max-steps",    type=int,   default=1000)
+    parser.add_argument("--max-steps",    type=int,   default=999)
     parser.add_argument("--batch-size",   type=int,   default=1)
     parser.add_argument("--block-size",   type=int,   default=2048)
     # DCP writes a directory of shards (not a single file), so the default is a
