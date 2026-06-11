@@ -444,7 +444,7 @@ def main():
     # directory name rather than a .pt path.
     parser.add_argument("--checkpoint",   type=str,   default="simple_checkpoint")
     parser.add_argument("--resume",       action="store_true")
-    parser.add_argument("--vocab-size",     type=int, default=32768)
+    parser.add_argument("--vocab-size",     type=int, default=8192)
     # BPE cache; the tokenizer is corpus-specific, so point this at a distinct
     # file when you change DATASET_PATH rather than reusing one trained on
     # another corpus.
