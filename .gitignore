@@ -3,5 +3,6 @@ modules/__pycache__/
 venv/
 *.pt
 *bpe.json
+bpe_*.json
 DataOutput/*
 !DataOutput/.gitkeep

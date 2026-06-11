@@ -150,8 +150,10 @@ def main():
     parser.add_argument("--n-layers", type=int, default=12)
     parser.add_argument("--n-heads", type=int, default=12)
     parser.add_argument("--n-embd", type=int, default=768)
-    parser.add_argument("--vocab-size", type=int, default=32768)
-    parser.add_argument("--tokenizer-path", default=str(REPO_ROOT / "bpe.json"))
+    parser.add_argument("--vocab-size", type=int, default=8192)
+    # Default encodes the vocab size (e.g. bpe_8192.json) so a cached
+    # tokenizer trained at a different vocab size is never silently reused.
+    parser.add_argument("--tokenizer-path", default=None)
     parser.add_argument("--output-dir", default=str(REPO_ROOT / "DataOutput" / "runs"))
     parser.add_argument("--run-id", default=None,
                         help="Override the auto-generated run directory name")
@@ -180,8 +182,10 @@ def main():
             if t:
                 yield t
 
+    tokenizer_path = args.tokenizer_path or str(
+        REPO_ROOT / f"bpe_{args.vocab_size}.json")
     tokenizer = train_or_load_bpe(corpus_iter(), vocab_size=args.vocab_size,
-                                  save_path=args.tokenizer_path)
+                                  save_path=tokenizer_path)
     eot_id = tokenizer.token_to_id("<|endoftext|>")
 
     train_dataset = StreamingTokenDataset(
