@@ -508,7 +508,11 @@ def main():
         shuffle=False,
         **loader_kwargs,
     )
-    val_loader   = DataLoader(val_dataset,   batch_size=args.batch_size, shuffle=False, **loader_kwargs)
+    val_loader   = DataLoader(
+        val_dataset,   batch_size=args.batch_size,
+        shuffle=False,
+        **loader_kwargs,
+    )
  
     # Pad vocab size to a multiple of 64 for aligned matmuls
     vocab_size        = tokenizer.get_vocab_size()
