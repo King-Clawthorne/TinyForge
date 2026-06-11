@@ -83,8 +83,15 @@ class SimpleTransformerLM(nn.Module):
         n_heads=12,
         n_embd=768,
         eot_id=None,
+        activation_checkpointing=False,
     ):
         super().__init__()
+
+        # Recompute block activations in backward instead of storing them —
+        # trades ~25-30% step time for a large activation-memory cut. Memory
+        # knob only: gradients are unchanged. Applies to the training path;
+        # cached generation never checkpoints.
+        self.activation_checkpointing = activation_checkpointing
 
         if n_embd % n_heads != 0:
             raise ValueError("n_embd must be divisible by n_heads")
@@ -137,9 +144,19 @@ class SimpleTransformerLM(nn.Module):
         offset = past_kvs[0][0].size(2) if past_kvs is not None else 0
         cos, sin = self.rope(seq_len, offset=offset)
 
+        checkpointing = (
+            self.activation_checkpointing and self.training
+            and torch.is_grad_enabled() and not use_cache
+        )
         for layer, block in enumerate(self.blocks):
             past_kv = past_kvs[layer] if past_kvs is not None else None
-            x, new_kv = block(x, cos, sin, block_mask=block_mask, past_kv=past_kv, use_cache=use_cache)
+            if checkpointing:
+                x, new_kv = torch.utils.checkpoint.checkpoint(
+                    block, x, cos, sin, block_mask, past_kv, use_cache,
+                    use_reentrant=False,
+                )
+            else:
+                x, new_kv = block(x, cos, sin, block_mask=block_mask, past_kv=past_kv, use_cache=use_cache)
             if use_cache:
                 new_kvs.append(new_kv)
 
@@ -436,6 +453,7 @@ def main():
                         choices=["default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"])
     parser.add_argument("--eval-interval", type=int, default=1)
     parser.add_argument("--grad-accum",   type=int, default=99)
+    parser.add_argument("--activation-checkpointing", action="store_true")
     parser.add_argument("--prompt",       type=str, default="Once upon a time")
 
     args = parser.parse_args()
@@ -522,6 +540,7 @@ def main():
         vocab_size=padded_vocab_size,
         block_size=block_size,
         eot_id=eot_id,
+        activation_checkpointing=args.activation_checkpointing,
     ).to(device)
  
     n_params = sum(p.numel() for p in model.parameters())
@@ -535,7 +554,9 @@ def main():
         from torch._inductor import config as inductor_config, select_algorithm
         select_algorithm.PRINT_AUTOTUNE = False
         inductor_config.max_autotune_report_choices_stats = False
-        model = torch.compile(model, mode=args.compile_mode, fullgraph=True)
+        # checkpoint() introduces graph breaks, so fullgraph must be off then.
+        model = torch.compile(model, mode=args.compile_mode,
+                              fullgraph=not args.activation_checkpointing)
  
     # Hybrid optimizer: Muon for 2D body matrices, AdamW for everything else.
     # AdamW params are split into two groups: 1D/embedding tensors (norms,
