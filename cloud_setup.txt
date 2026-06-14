@@ -19,6 +19,6 @@ rm -rf DataOutput/runs
 python DataScripts/run_matrix.py 2>&1 | tee matrix.log
 python DataScripts/analyze_results.py
 
-# Detach:           Ctrl-b then d
-# Reattach later:   tmux attach -t train
-# Watch from another shell:  tail -f matrix.log
+# Detach: Ctrl-b then d
+# Reattach later: tmux attach -t train
+# Watch from another shell: tail -f matrix.log
