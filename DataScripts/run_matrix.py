@@ -99,7 +99,7 @@ def main():
     parser.add_argument("--output-dir", default=str(REPO_ROOT / "DataOutput"))
     # Pass-through training knobs (defaults match train_ablation.py)
     parser.add_argument("--max-steps", type=int, default=1000)
-    parser.add_argument("--batch-size", type=int, default=16)
+    parser.add_argument("--batch-size", type=int, default=15)
     parser.add_argument("--grad-accum", type=int, default=1)
     parser.add_argument("--block-size", type=int, default=2048)
     parser.add_argument("--compile-mode", default="default")
