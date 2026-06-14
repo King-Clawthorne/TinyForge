@@ -69,12 +69,6 @@ Tell me the runs are done. I will read DataOutput/ (especially
 analysis/ and the per-run summary.json files) and write the paper.
 Please don't delete or move anything inside DataOutput/ before that.
 
-ptxas crash note (RTX 50-series / sm_120a): ptxas segfaults compiling the
-flex attention backward kernel with line info. Fixed — train_ablation.py now
-sets TRITON_DISABLE_LINE_INFO=1 automatically; no prefix needed. If it ever
-resurfaces, --attention sdpa is a fallback with identical masking semantics
-(use the same choice for ALL runs).
-
 Notes
 -----
 - The tokenizer (bpe.json) is trained once on first run and cached; later

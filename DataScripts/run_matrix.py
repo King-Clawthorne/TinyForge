@@ -99,12 +99,11 @@ def main():
     parser.add_argument("--output-dir", default=str(REPO_ROOT / "DataOutput"))
     # Pass-through training knobs (defaults match train_ablation.py)
     parser.add_argument("--max-steps", type=int, default=1000)
-    parser.add_argument("--batch-size", type=int, default=16)
+    parser.add_argument("--batch-size", type=int, default=17)
     parser.add_argument("--grad-accum", type=int, default=1)
     parser.add_argument("--block-size", type=int, default=2048)
     parser.add_argument("--compile-mode", default="reduce-overhead")
     parser.add_argument("--activation-checkpointing", action="store_true")
-    parser.add_argument("--attention", choices=["flex", "sdpa"], default="flex")
     args = parser.parse_args()
 
     out_dir = Path(args.output_dir)
@@ -154,7 +153,6 @@ def main():
                "--grad-accum", str(args.grad_accum),
                "--block-size", str(args.block_size),
                "--compile-mode", args.compile_mode,
-               "--attention", args.attention,
                "--output-dir", str(runs_dir),
                "--run-id", run_id]
         if args.activation_checkpointing:

@@ -13,9 +13,9 @@ z-loss and logit softcap are loss-side toggles and live in train_ablation.py
 (LigerFusedLinearCrossEntropyLoss arguments), not here. The optimizer toggle
 (Muon vs AdamW) also lives in train_ablation.py.
 
-Only the training/eval path is implemented (FlexAttention + document
-BlockMask, returns pre-projection hidden states for the fused loss). No KV
-cache / generation — the study only measures loss curves.
+Only the training/eval path is implemented (plain causal SDPA, returns
+pre-projection hidden states for the fused loss). No KV cache / generation —
+the study only measures loss curves.
 """
 
 import math
@@ -28,7 +28,6 @@ import torch.nn.functional as F
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from torch.nn.attention.flex_attention import flex_attention
 from modules.layers import RMSNorm, RotaryEmbedding, QKNorm, apply_rope
 
 
@@ -77,7 +76,7 @@ class AblationBlock(nn.Module):
         nn.init.normal_(self.proj.weight, mean=0.0, std=0.02 / math.sqrt(2 * n_layers))
         nn.init.normal_(self.w_down.weight, mean=0.0, std=0.02 / math.sqrt(2 * n_layers))
 
-    def forward(self, x, cos, sin, block_mask, v1):
+    def forward(self, x, cos, sin, v1):
         bsz, seq_len, _ = x.shape
 
         residual = x
@@ -102,15 +101,10 @@ class AblationBlock(nn.Module):
         if self.qk_gain is not None:
             q = q * self.qk_gain.view(1, self.n_heads, 1, 1).to(q.dtype)
 
-        if isinstance(block_mask, torch.Tensor):
-            # Dense-mask fallback (--attention sdpa): same causal+same-document
-            # semantics as the FlexAttention BlockMask, for machines where
-            # Triton can't compile the flex backward kernel (e.g. ptxas
-            # segfaults on sm_120a consumer Blackwell).
-            y = F.scaled_dot_product_attention(
-                q, k, v, attn_mask=block_mask, scale=self.scale)
-        else:
-            y = flex_attention(q, k, v, block_mask=block_mask, scale=self.scale)
+        # Plain causal attention so SDPA dispatches to its fused flash / cuDNN
+        # backends (no document masking).
+        y = F.scaled_dot_product_attention(
+            q, k, v, is_causal=True, scale=self.scale)
         y = y.permute(0, 2, 1, 3).contiguous().view(bsz, seq_len, self.n_embd)
         y = self.proj(y)
         x = residual + (self.ls_attn * y if self.ls_attn is not None else y)
@@ -156,7 +150,7 @@ class AblationTransformerLM(nn.Module):
         nn.init.normal_(self.token_emb.weight, mean=0.0, std=0.02)
         nn.init.normal_(self.lm_head.weight, mean=0.0, std=0.02)
 
-    def forward(self, idx, block_mask=None):
+    def forward(self, idx):
         bsz, seq_len = idx.shape
         if seq_len > self.block_size:
             raise ValueError("Sequence length exceeds block_size")
@@ -168,9 +162,9 @@ class AblationTransformerLM(nn.Module):
         for block in self.blocks:
             if checkpointing:
                 x, v1 = torch.utils.checkpoint.checkpoint(
-                    block, x, cos, sin, block_mask, v1, use_reentrant=False)
+                    block, x, cos, sin, v1, use_reentrant=False)
             else:
-                x, v1 = block(x, cos, sin, block_mask, v1)
+                x, v1 = block(x, cos, sin, v1)
         # Pre-projection hidden states; the caller applies the fused
         # lm_head + cross-entropy loss (see train_ablation.py).
         return self.ln_f(x)
