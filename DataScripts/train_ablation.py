@@ -34,7 +34,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 import warnings
+import logging
 warnings.filterwarnings("ignore")
+# torch._inductor emits a logging-level warning ("Not enough SMs to use
+# max_autotune_gemm mode") that warnings.filterwarnings can't suppress.
+logging.getLogger("torch._inductor").setLevel(logging.ERROR)
 os.environ.setdefault("PYTHONWARNINGS", "ignore")
 os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
 os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
