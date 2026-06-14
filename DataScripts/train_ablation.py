@@ -36,9 +36,6 @@ sys.path.insert(0, str(REPO_ROOT))
 import warnings
 import logging
 warnings.filterwarnings("ignore")
-# torch._inductor emits a logging-level warning ("Not enough SMs to use
-# max_autotune_gemm mode") that warnings.filterwarnings can't suppress.
-logging.getLogger("torch._inductor").setLevel(logging.ERROR)
 os.environ.setdefault("PYTHONWARNINGS", "ignore")
 os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
 os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
@@ -49,6 +46,10 @@ os.environ.setdefault("TRITON_DISABLE_LINE_INFO", "1")
 
 import numpy as np
 import torch
+# torch initializes its own logging on import, so this must run *after* the
+# import to stick. Silences the harmless "Not enough SMs to use
+# max_autotune_gemm mode" warning that warnings.filterwarnings can't catch.
+logging.getLogger("torch._inductor").setLevel(logging.ERROR)
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from liger_kernel.transformers.fused_linear_cross_entropy import (
