@@ -24,7 +24,7 @@ If this works, the plumbing is fine.
 
 STEP 1 — cheap pilot (recommended, ~1-2 h total)
 ------------------------------------------------
-    python DataScripts/run_matrix.py --max-steps 200 --grad-accum 8
+    python DataScripts/run_matrix.py --max-steps 3 --grad-accum 1
 
 Purpose: catches OOM / compile problems / divergence on all 22 configs before
 you commit to the full budget. Watch the first run: the torch.compile step on
