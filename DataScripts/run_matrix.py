@@ -21,7 +21,7 @@ Usage (from repo root):
   python DataScripts/run_matrix.py                    # run everything
   python DataScripts/run_matrix.py --seeds 3          # 3 seeds per config
   python DataScripts/run_matrix.py --max-steps 500    # cheaper pilot
-  python DataScripts/run_matrix.py --start-at 5       # begin at the 5th job
+  python DataScripts/run_matrix.py --start-at 5       # skip configs 1-4 (every seed)
 """
 
 import sys
@@ -97,9 +97,9 @@ def main():
     parser = argparse.ArgumentParser(description="Run the ablation matrix")
     parser.add_argument("--seeds", type=int, default=1)
     parser.add_argument("--start-at", type=int, default=1,
-                        help="Skip to the Nth job (1-based, matching the "
-                             "[N/total] index in the run list). Jobs before N "
-                             "are skipped outright without checking results.")
+                        help="Begin at the Nth config (1-based, 1..n_configs). "
+                             "Configs before N are skipped for every seed, "
+                             "without checking results.")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--output-dir", default=str(REPO_ROOT / "DataOutput"))
     # Pass-through training knobs (defaults match train_ablation.py)
@@ -124,8 +124,8 @@ def main():
     matrix = build_matrix()
     jobs = []
     for seed in range(args.seeds):
-        for cfg in matrix:
-            jobs.append({**cfg, "seed": seed,
+        for config_idx, cfg in enumerate(matrix):
+            jobs.append({**cfg, "seed": seed, "config_idx": config_idx,
                          "run_id": run_id_from_config({**cfg, "seed": seed})})
 
     manifest = {
@@ -146,8 +146,9 @@ def main():
     done = skipped = failed = 0
     for i, job in enumerate(jobs):
         run_id = job["run_id"]
-        if i + 1 < args.start_at:
-            print(f"[{i + 1}/{len(jobs)}] SKIP (before --start-at "
+        if job["config_idx"] + 1 < args.start_at:
+            print(f"[{i + 1}/{len(jobs)}] SKIP (config "
+                  f"{job['config_idx'] + 1} before --start-at "
                   f"{args.start_at}): {run_id}")
             skipped += 1
             continue
