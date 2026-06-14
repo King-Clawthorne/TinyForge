@@ -4,17 +4,12 @@ nvidia-smi
 git clone https://github.com/King-Clawthorne/Cohen-Transformer.git
 cd Cohen-Transformer
 git checkout idea
-
-# Start a tmux session and run everything below inside it, so the long matrix
-# run survives SSH disconnects. Detach with Ctrl-b then d; reattach later with
-# `tmux attach -t train`.
 tmux new -s train
 
 python3 -m venv venv
 source venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-pip install matplotlib
 python -c "import torch; print(torch.__version__); print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))"
 
 python DataScripts/prepare_data.py
