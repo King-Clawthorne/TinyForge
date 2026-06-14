@@ -123,8 +123,8 @@ def main():
 
     matrix = build_matrix()
     jobs = []
-    for seed in range(args.seeds):
-        for config_idx, cfg in enumerate(matrix):
+    for config_idx, cfg in enumerate(matrix):
+        for seed in range(args.seeds):
             jobs.append({**cfg, "seed": seed, "config_idx": config_idx,
                          "run_id": run_id_from_config({**cfg, "seed": seed})})
 
