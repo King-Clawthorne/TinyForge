@@ -103,7 +103,7 @@ backbone with all toggles off is the AdamW baseline~\cite{loshchilov2019adamw}.
 \toprule
 \textbf{Toggle} & \textbf{What it does} & \textbf{Where} \\
 \midrule
-optimizer & Muon~\cite{jordan2024muon} (Newton--Schulz-orthogonalized momentum, \texttt{match\_rms\_adamw} LR) on 2D body matrices + AdamW on embeddings/head/scales, vs.\ pure AdamW & optimizer \\
+optimizer & Muon~\cite{jordan2024muon} (Newton-Schulz-orthogonalized momentum, \texttt{match\_rms\_adamw} LR) on 2D body matrices + AdamW on embeddings/head/scales, vs.\ pure AdamW & optimizer \\
 qk\_norm & Per-head RMSNorm on Q and K before RoPE~\cite{henry2020qknorm} & attention \\
 qk\_gain & Learnable per-head multiplicative gain folded into Q (scales scores pre-softmax) & attention \\
 layerscale & Learnable per-channel residual gates on the attention and MLP branches (CaiT~\cite{touvron2021cait}), init 0.1 & residual \\
@@ -246,8 +246,8 @@ The best individual configurations are all Muon $+$ QK-norm based:
 4  & Muon, full recipe (all on)               & 1.669 (seed mean 1.670) \\
 19 & Muon $+$ QK-norm only                    & 1.747 \\
 22 & Muon, all on except QK-norm              & 1.781 \\
--- & AdamW baseline (all off)                 & 1.987 \\
--- & AdamW full recipe                        & 1.847 \\
+n/a & AdamW baseline (all off)               & 1.987 \\
+n/a & AdamW full recipe                      & 1.847 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -269,8 +269,8 @@ majority.
 \centering
 \includegraphics[width=\linewidth]{../DataOutput/analysis/loss_curves_paper.png}
 \caption{Validation-loss curves, one line per configuration (mean over 3 seeds,
-with a shaded min--max band that is narrow because seed spread, std
-${\approx}0.003$--$0.008$ nats, is small next to the between-config gaps) for the
+with a shaded min-to-max band that is narrow because seed spread, std
+${\approx}0.003$ to $0.008$ nats, is small next to the between-config gaps) for the
 two anchors (the all-off AdamW baseline, dashed black, and the all-on full
 Muon recipe, green) and the leave-one-out runs (full recipe with one
 component removed, labelled by the dropped component). The full recipe separates
@@ -283,7 +283,7 @@ slightly \emph{improves} on the full recipe.}
 \subsection{Wall-clock cost}
 \label{sec:cost}
 
-Each run logs total \texttt{wall\_time\_s}. Runs span 260--325 s (mean 278 s,
+Each run logs total \texttt{wall\_time\_s}. Runs span 260 to 325 s (mean 278 s,
 1000 steps), and the per-component cost, measured with the same matched on/off
 pairs as the loss effects, is concentrated in a single place.
 
@@ -306,7 +306,7 @@ qk\_gain                  & $-0.7$  & $-0.3$ & 7.35 & noise \\
 \end{table}
 
 Switching AdamW $\to$ Muon is the only clean cost signal, ${\approx}20$ s/run
-($+7.4\%$, std 0.66 over 9 pairs), the Newton--Schulz orthogonalization overhead
+($+7.4\%$, std 0.66 over 9 pairs), the Newton-Schulz orthogonalization overhead
 on the body matrices. QK-norm's nominal $+8.7$ s has a std (7.1 s) larger than
 its mean, so its per-step elementwise-RMSNorm cost is effectively buried in
 shared-GPU timing jitter. Every other component is sub-$1\%$ and indistinguishable
