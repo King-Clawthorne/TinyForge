@@ -56,7 +56,7 @@ def classify(s):
         return "Full Muon recipe (all on)", "anchor"
     if n_on == len(FACTORS) - 1:
         dropped = next(f for f in FACTORS if not on(s, f))
-        return f"− {LABELS[dropped]}", "loo"
+        return f"Full recipe minus {LABELS[dropped]}", "loo"
     return None, None
 
 
@@ -85,7 +85,7 @@ def main():
         groups[label]["cls"] = cls
         groups[label]["final"].append(s["final_val_loss"])
 
-    # Order legend by final loss (best first) so colors track quality.
+    # Order by final loss (best first) so leave-one-out colors track quality.
     ordered = sorted(groups.items(),
                      key=lambda kv: statistics.mean(kv[1]["final"]))
 
@@ -95,7 +95,14 @@ def main():
     color_of = {lbl: cmap(i / max(1, len(loo_items) - 1))
                 for i, (lbl, _) in enumerate(loo_items)}
 
-    for label, g in ordered:
+    # Legend reads top-to-bottom: the two reference anchors first, then the
+    # leave-one-out runs ordered best to worst. Anchors lead because every
+    # leave-one-out is "the full recipe minus one component" relative to them.
+    anchors = [kv for kv in ordered if kv[1]["cls"] == "anchor"]
+    anchors.sort(key=lambda kv: 0 if "baseline" in kv[0] else 1)
+    plot_order = anchors + loo_items
+
+    for label, g in plot_order:
         steps, vals, lo, hi = seed_average(g["curves"])
         if g["cls"] == "anchor":
             is_full = "Full" in label
@@ -116,9 +123,12 @@ def main():
     ax.set_xlim(0, 1000)
     ax.set_ylim(1.6, 2.6)  # zoom to where the curves separate
     ax.grid(True, which="both", alpha=0.25)
-    ax.legend(title="configuration", fontsize=8, title_fontsize=9,
-              loc="center left", bbox_to_anchor=(1.01, 0.5),
-              frameon=False)
+    leg = ax.legend(title="Configuration (one line per config, seed mean)",
+                    fontsize=9.5, title_fontsize=10,
+                    loc="center left", bbox_to_anchor=(1.01, 0.5),
+                    labelspacing=0.7, handlelength=2.6, borderpad=0.8,
+                    frameon=True, framealpha=0.9, edgecolor="0.8")
+    leg.get_title().set_multialignment("left")
     fig.tight_layout()
     fig.savefig(OUT, dpi=200, bbox_inches="tight")
     print(f"wrote {OUT}")
