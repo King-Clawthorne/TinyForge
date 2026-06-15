@@ -6,3 +6,9 @@ venv/
 bpe_*.json
 DataOutput/*
 !DataOutput/.gitkeep
+
+# LaTeX build intermediates (paper.bbl kept for arXiv)
+*.aux
+*.log
+*.out
+*.blg

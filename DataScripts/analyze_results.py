@@ -9,6 +9,8 @@ DataOutput/analysis/:
   interactions.csv     - 2x2 cell means + interaction terms for the targeted
                          pairs (Muon x QK-norm, LayerScale x value-residual,
                          z-loss x softcap, z-loss x QK-gain, softcap x QK-gain)
+  wall_time_effects.csv - per-factor effect on wall_time_s (seconds and percent),
+                         same matched-pair method as main_effects.csv
   summary.md           - human-readable digest of all of the above
   loss_curves.png      - val-loss curves for all runs (needs matplotlib)
   loss_curves_anchors.png - baseline vs full recipe vs leave-one-out
@@ -72,8 +74,12 @@ def write_results_csv(runs, path):
             w.writerow({k: r.get(k) for k in fields})
 
 
-def main_effects(runs):
-    """For each factor: mean Δ(final val loss) over matched on/off pairs."""
+def main_effects(runs, metric="final_val_loss"):
+    """For each factor: mean Δ(metric) over matched on/off pairs.
+
+    Also reports the effect as a percentage of the matched OFF baseline, which
+    is the natural unit for wall-clock cost.
+    """
     effects = []
     for factor in FACTORS:
         groups = defaultdict(dict)
@@ -81,16 +87,19 @@ def main_effects(runs):
             if r.get("diverged"):
                 continue
             groups[config_key(r, exclude=(factor,))][factor_on(r, factor)] = r
-        deltas = []
+        deltas, bases = [], []
         for pair in groups.values():
             if True in pair and False in pair:
-                deltas.append(pair[True]["final_val_loss"]
-                              - pair[False]["final_val_loss"])
+                deltas.append(pair[True][metric] - pair[False][metric])
+                bases.append(pair[False][metric])
         if deltas:
+            mean_off = statistics.mean(bases)
             effects.append({
                 "factor": factor,
                 "n_pairs": len(deltas),
                 "mean_delta": statistics.mean(deltas),
+                "mean_delta_pct": (100.0 * statistics.mean(deltas) / mean_off
+                                   if mean_off else 0.0),
                 "std_delta": statistics.stdev(deltas) if len(deltas) > 1 else 0.0,
                 "min_delta": min(deltas),
                 "max_delta": max(deltas),
@@ -188,7 +197,7 @@ def plot_curves(runs, analysis_dir):
     print(f"Plots written to {analysis_dir}")
 
 
-def write_summary_md(runs, effects, inter_rows, path):
+def write_summary_md(runs, effects, inter_rows, path, cost_effects=None):
     lines = ["# Ablation study results\n"]
     n_div = sum(1 for r in runs if r.get("diverged"))
     lines.append(f"{len(runs)} runs total, {n_div} diverged.\n")
@@ -224,6 +233,17 @@ def write_summary_md(runs, effects, inter_rows, path):
                          f"{r['interaction']:+.4f} | {r['n_quads']} |")
         lines.append("")
 
+    if cost_effects:
+        lines.append("## Wall-clock cost main effects (Δ wall_time_s, ON minus "
+                     "OFF)\n")
+        lines.append("| factor | mean Δs | mean Δ% | std (s) | n pairs |")
+        lines.append("|---|---|---|---|---|")
+        for e in sorted(cost_effects, key=lambda e: -e["mean_delta"]):
+            lines.append(f"| {e['factor']} | {e['mean_delta']:+.2f} | "
+                         f"{e['mean_delta_pct']:+.1f}% | {e['std_delta']:.2f} | "
+                         f"{e['n_pairs']} |")
+        lines.append("")
+
     if n_div:
         lines.append("## Diverged runs\n")
         for r in runs:
@@ -231,7 +251,7 @@ def write_summary_md(runs, effects, inter_rows, path):
                 lines.append(f"- {r['run_id']}")
         lines.append("")
 
-    path.write_text("\n".join(lines))
+    path.write_text("\n".join(lines), encoding="utf-8")
 
 
 def main():
@@ -255,7 +275,10 @@ def main():
     write_dict_csv(effects, analysis_dir / "main_effects.csv")
     inter_rows = interactions(runs)
     write_dict_csv(inter_rows, analysis_dir / "interactions.csv")
-    write_summary_md(runs, effects, inter_rows, analysis_dir / "summary.md")
+    cost_effects = main_effects(runs, metric="wall_time_s")
+    write_dict_csv(cost_effects, analysis_dir / "wall_time_effects.csv")
+    write_summary_md(runs, effects, inter_rows, analysis_dir / "summary.md",
+                     cost_effects=cost_effects)
     plot_curves(runs, analysis_dir)
 
     print(f"Analyzed {len(runs)} runs.")

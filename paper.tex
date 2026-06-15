@@ -14,7 +14,7 @@
 
 \title{Which Parts of the ``Modern Transformer Recipe'' Actually Matter?\\
 A Controlled Ablation on TinyStories}
-\author{Cohen-Transformer}
+\author{Cohen Brunner Thomas}
 \date{June 2026}
 
 \begin{document}
@@ -22,8 +22,8 @@ A Controlled Ablation on TinyStories}
 
 \begin{abstract}
 Contemporary language-model training stacks bundle a long list of small
-architectural and optimization tweaks --- Muon, QK-norm, learnable QK-gain,
-LayerScale, value residuals, z-loss, logit softcapping --- and present them as a
+architectural and optimization tweaks, namely Muon, QK-norm, learnable QK-gain,
+LayerScale, value residuals, z-loss, and logit softcapping, and present them as a
 single ``modern recipe.'' We disentangle this bundle with a controlled,
 multi-seed ablation. A fixed ${\sim}97.6$M-parameter decoder-only transformer is
 trained on TinyStories under an identical token budget (30.72M tokens, 1000
@@ -32,7 +32,7 @@ fractional factorial design (all-off and all-on anchors, single-feature add-ins,
 leave-one-out drops from the full recipe, and targeted $2\times2$ interaction
 cells). Two components dominate: switching AdamW $\to$ Muon and adding QK-norm
 each cut final validation loss by ${\approx}0.13$ nats, and the two are strongly
-\emph{synergistic} --- together they buy ${\approx}0.24$ nats, far more than the
+\emph{synergistic}. Together they buy ${\approx}0.24$ nats, far more than the
 sum of their individual effects. LayerScale and value residuals each contribute
 a smaller but real ${\approx}0.05$ nats and are mildly synergistic with each
 other. QK-gain and logit softcap are effectively free riders ($|\Delta| < 0.002$
@@ -48,10 +48,10 @@ The recipes shared in open LLM-training projects are cumulative: each new trick
 is added on top of the last, and the resulting stack is evaluated as a whole.
 This makes it hard to know which ingredients carry the gains, which are inert,
 and which are actively counterproductive at a given scale. It also makes the
-recipes hard to port --- a practitioner copying the full stack inherits its dead
+recipes hard to port. A practitioner copying the full stack inherits its dead
 weight and its failure modes.
 
-This paper takes the seven toggles in the \texttt{Cohen-Transformer} training
+This paper takes the seven toggles in the \texttt{TinyForge} training
 stack and measures each one in isolation and in combination, holding everything
 else fixed (model size, data, token budget, learning-rate schedule, weight
 decay, gradient clipping, batch order). The question is deliberately narrow and
@@ -61,8 +61,9 @@ contribute to validation loss, and do the components interact?}
 \section{The components under study}
 
 All seven are independent toggles over a common backbone (12 layers, 12 heads,
-$d_{\text{model}}=768$, SwiGLU MLP, RMSNorm pre-norm, RoPE, untied LM head). The
-backbone with all toggles off is the AdamW baseline.
+$d_{\text{model}}=768$, SwiGLU MLP~\cite{shazeer2020glu}, RMSNorm
+pre-norm~\cite{zhang2019rmsnorm}, RoPE~\cite{su2024roformer}, untied LM head). The
+backbone with all toggles off is the AdamW baseline~\cite{loshchilov2019adamw}.
 
 \begin{table}[h]
 \centering
@@ -71,30 +72,31 @@ backbone with all toggles off is the AdamW baseline.
 \toprule
 \textbf{Toggle} & \textbf{What it does} & \textbf{Where} \\
 \midrule
-optimizer & Muon (Newton--Schulz-orthogonalized momentum, \texttt{match\_rms\_adamw} LR) on 2D body matrices + AdamW on embeddings/head/scales, vs.\ pure AdamW & optimizer \\
-qk\_norm & Per-head RMSNorm on Q and K before RoPE (Gemma-2 style) & attention \\
+optimizer & Muon~\cite{jordan2024muon} (Newton--Schulz-orthogonalized momentum, \texttt{match\_rms\_adamw} LR) on 2D body matrices + AdamW on embeddings/head/scales, vs.\ pure AdamW & optimizer \\
+qk\_norm & Per-head RMSNorm on Q and K before RoPE~\cite{henry2020qknorm} & attention \\
 qk\_gain & Learnable per-head multiplicative gain folded into Q (scales scores pre-softmax) & attention \\
-layerscale & Learnable per-channel residual gates on the attention and MLP branches (CaiT), init 0.1 & residual \\
-value\_residual & Each layer mixes its value with layer-0's value via a learnable per-layer $\lambda$ (ResFormer, arXiv:2410.17897) & attention \\
-z\_loss & \texttt{lse\_square\_scale}~$=1\mathrm{e}{-4}$ regularizer on the log-partition & loss \\
+layerscale & Learnable per-channel residual gates on the attention and MLP branches (CaiT~\cite{touvron2021cait}), init 0.1 & residual \\
+value\_residual & Each layer mixes its value with layer-0's value via a learnable per-layer $\lambda$ (ResFormer~\cite{zhou2024resformer}) & attention \\
+z\_loss & \texttt{lse\_square\_scale}~$=1\mathrm{e}{-4}$ regularizer on the log-partition~\cite{chowdhery2023palm} & loss \\
 softcap & tanh logit softcap at 30.0 & loss \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 z-loss and softcap are loss-side options of
-\texttt{LigerFusedLinearCrossEntropyLoss}; the rest are model/optimizer changes.
+\texttt{LigerFusedLinearCrossEntropyLoss}~\cite{hsu2024liger}. The rest are
+model/optimizer changes.
 The Muon $+$ AdamW split and weight-decay policy match the production
 \texttt{simple.py} stack.
 
 \section{Experimental setup}
 
 \paragraph{Model.} ${\sim}97.6$M parameters (the small variation across
-configurations --- 97{,}536{,}768 to 97{,}573{,}787 --- is the handful of extra
-scale/gate parameters some toggles add; it is ${<}0.04\%$ and does not confound
+configurations, 97{,}536{,}768 to 97{,}573{,}787, is the handful of extra
+scale/gate parameters some toggles add. It is ${<}0.04\%$ and does not confound
 the comparison).
 
-\paragraph{Data.} \texttt{roneneldan/TinyStories}, tokenized once with a fixed
+\paragraph{Data.} \texttt{roneneldan/TinyStories}~\cite{eldan2023tinystories}, tokenized once with a fixed
 8192-token byte-level BPE into a memory-mapped \texttt{uint16} corpus. Every run
 reads identical $(x,y)$ blocks in identical order (no shuffling, deterministic
 batches), so the only differences between runs are the toggles and the seed.
@@ -109,16 +111,16 @@ held-out blocks at the final step.
 \paragraph{Design.} A full $2^7$ grid (128 configs) was not run. Instead a
 fractional factorial focuses the budget on the questions that matter:
 \begin{itemize}
-  \item \textbf{Anchors} --- all-off (pure AdamW baseline) and all-on (full Muon recipe).
-  \item \textbf{Add-one} --- baseline + exactly one toggle, for clean main effects of the features expected to matter on their own.
-  \item \textbf{Leave-one-out} --- full recipe with exactly one toggle removed, to measure each component's \emph{marginal} contribution inside the complete stack.
-  \item \textbf{Targeted $2\times2$ cells} --- Muon$\times$QK-norm, LayerScale$\times$value-residual, z-loss$\times$softcap, z-loss$\times$QK-gain, softcap$\times$QK-gain, for interaction terms.
+  \item \textbf{Anchors.} All-off (pure AdamW baseline) and all-on (full Muon recipe).
+  \item \textbf{Add-one.} Baseline + exactly one toggle, for clean main effects of the features expected to matter on their own.
+  \item \textbf{Leave-one-out.} Full recipe with exactly one toggle removed, to measure each component's \emph{marginal} contribution inside the complete stack.
+  \item \textbf{Targeted $2\times2$ cells.} Muon$\times$QK-norm, LayerScale$\times$value-residual, z-loss$\times$softcap, z-loss$\times$QK-gain, and softcap$\times$QK-gain, for interaction terms.
 \end{itemize}
 22 unique configs $\times$ 3 seeds $=$ 66 runs. Main effects are computed over
-matched on/off pairs (configs identical except the factor in question);
-interactions over matched $2\times2$ quadruples. Effects are reported as
-$\Delta(\text{final val loss}) = \text{ON} - \text{OFF}$, so \textbf{negative
-means the component helps}.
+matched on/off pairs (configs identical except the factor in question).
+Interactions are computed over matched $2\times2$ quadruples. Effects are
+reported as $\Delta(\text{final val loss}) = \text{ON} - \text{OFF}$, so
+\textbf{negative means the component helps}.
 
 \section{Results}
 
@@ -143,18 +145,18 @@ softcap                  & $-0.000$ & 0.010 & 15 & negligible \\
 \end{table}
 
 Two findings stand out. First, QK-norm and the Muon optimizer are the workhorses
-of the recipe, each worth ${\approx}0.13$ nats --- an order of magnitude more
+of the recipe, each worth ${\approx}0.13$ nats, an order of magnitude more
 than the next tier. Second, \textbf{z-loss consistently hurts} at this scale:
 its effect is positive in mean and tight in variance (std 0.008 over 15 pairs),
 so this is a real signal, not noise. z-loss is a numerical-stability regularizer
-designed for large-vocab, long-schedule training; with an 8192-token vocab and a
+designed for large-vocab, long-schedule training. With an 8192-token vocab and a
 1000-step budget there is no instability to suppress (zero runs diverged), and
 the penalty simply pulls the model off the cross-entropy objective.
 
 \subsection{Interactions}
 
 $\text{interaction} = [\text{effect of A} \mid \text{B on}] - [\text{effect of A}
-\mid \text{B off}]$; \textbf{negative $=$ synergy} (A helps more when B is
+\mid \text{B off}]$. \textbf{Negative $=$ synergy} (A helps more when B is
 present), positive $=$ redundancy/antagonism.
 
 \begin{table}[h]
@@ -189,10 +191,10 @@ make it concrete:
 \end{tabular}
 \end{table}
 
-Alone, Muon buys ${\approx}0.023$ nats and QK-norm ${\approx}0.058$ nats;
-together they buy ${\approx}0.238$ --- roughly three times the sum of the parts.
+Alone, Muon buys ${\approx}0.023$ nats and QK-norm ${\approx}0.058$ nats.
+Together they buy ${\approx}0.238$, roughly three times the sum of the parts.
 Muon orthogonalizes the body weight updates, and QK-norm bounds the scale of the
-query/key projections feeding attention; the data say these two stabilizations
+query/key projections feeding attention. The data say these two stabilizations
 are complementary, and that \textbf{most of the ``modern recipe'' advantage is
 concentrated in this single pair.} LayerScale and value residuals show the same
 pattern more weakly: each gates or re-routes the residual stream, and they
@@ -220,7 +222,7 @@ The best individual configurations are all Muon $+$ QK-norm based:
 \end{table}
 
 The top three runs (all three seeds) are the full recipe \emph{with z-loss
-removed}, beating the kitchen-sink configuration by ${\approx}0.018$ nats ---
+removed}, beating the kitchen-sink configuration by ${\approx}0.018$ nats,
 consistent with the main-effect sign of z-loss. Dropping QK-norm from the full
 recipe (rank 22, 1.781) is the single most damaging leave-one-out, again
 confirming QK-norm as the load-bearing component. Note also that the full recipe
@@ -236,21 +238,58 @@ majority.
 \centering
 \includegraphics[width=\linewidth]{DataOutput/analysis/loss_curves_paper.png}
 \caption{Validation-loss curves, one line per configuration (mean over 3 seeds,
-with a shaded min--max band; the bands are narrow because seed spread, std
+with a shaded min--max band that is narrow because seed spread, std
 ${\approx}0.003$--$0.008$ nats, is small next to the between-config gaps) for the
-two anchors --- the all-off AdamW baseline (dashed black) and the all-on full
-Muon recipe (green) --- and the leave-one-out runs (full recipe with one
+two anchors (the all-off AdamW baseline, dashed black, and the all-on full
+Muon recipe, green) and the leave-one-out runs (full recipe with one
 component removed, labelled by the dropped component). The full recipe separates
-from the baseline early and holds the gap throughout; among the leave-one-outs,
+from the baseline early and holds the gap throughout. Among the leave-one-outs,
 dropping Muon or QK-norm is by far the most damaging, while dropping z-loss
 slightly \emph{improves} on the full recipe.}
 \label{fig:curves}
 \end{figure}
 
+\subsection{Wall-clock cost}
+\label{sec:cost}
+
+Each run logs total \texttt{wall\_time\_s}. Runs span 260--325 s (mean 278 s,
+1000 steps), and the per-component cost, measured with the same matched on/off
+pairs as the loss effects, is concentrated in a single place.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}lRRRl@{}}
+\toprule
+\textbf{Factor} & \textbf{$\Delta$s} & \textbf{$\Delta$\%} & \textbf{std (s)} & \textbf{reading} \\
+\midrule
+\textbf{optimizer (Muon)} & $+19.9$ & $+7.4$ & 0.66 & real cost, tight \\
+qk\_norm                  & $+8.7$  & $+3.1$ & 7.12 & cost within noise \\
+value\_residual           & $+2.5$  & $+0.9$ & 10.09 & noise \\
+layerscale                & $+1.6$  & $+0.6$ & 10.45 & noise \\
+softcap                   & $+0.3$  & $+0.1$ & 0.62 & negligible \\
+z\_loss                   & $-0.2$  & $-0.1$ & 0.50 & negligible \\
+qk\_gain                  & $-0.7$  & $-0.3$ & 7.35 & noise \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Switching AdamW $\to$ Muon is the only clean cost signal, ${\approx}20$ s/run
+($+7.4\%$, std 0.66 over 9 pairs), the Newton--Schulz orthogonalization overhead
+on the body matrices. QK-norm's nominal $+8.7$ s has a std (7.1 s) larger than
+its mean, so its per-step elementwise-RMSNorm cost is effectively buried in
+shared-GPU timing jitter. Every other component is sub-$1\%$ and indistinguishable
+from noise. The cost ranking therefore agrees with the accuracy ranking: the two
+load-bearing components are also the only two with measurable overhead. The price
+is cheap for the payoff. The best configuration (298 s) costs $+14.6\%$ wall time
+over the baseline (260 s) for its $-0.336$-nat gain, and the Muon $+$ QK-norm pair
+alone (292 s) buys $-0.238$ nats for ${\approx}12\%$ more time, with the remaining
+components adding ${\approx}0.10$ nats more at near-zero extra cost.
+
 \section{Discussion}
 
 \paragraph{A practitioner's shortlist.} If you must port only part of this
-stack, port Muon and QK-norm \emph{together} --- separately they underwhelm,
+stack, port Muon and QK-norm \emph{together}. Separately they underwhelm,
 together they deliver. LayerScale and value residuals are a worthwhile second
 tier. QK-gain and softcap can be dropped with no measurable cost at this scale,
 and z-loss should be dropped outright unless a longer schedule or larger vocab
@@ -265,10 +304,10 @@ not folded into a recipe by default.
 
 \paragraph{Scope and limitations.}
 \begin{itemize}
-  \item \textbf{Scale.} One model size (${\sim}98$M), one corpus (TinyStories --- simple, low-entropy text), one short budget (30.72M tokens). The \emph{signs} of the large effects are likely robust, but the inert/harmful verdicts for z-loss and softcap are the components most likely to flip at larger vocab or longer schedules --- precisely their design regime. These are the priority for a follow-up.
-  \item \textbf{Fractional design.} Three- and higher-way interactions are not estimated; main effects and the five targeted pairs are. The strong Muon$\times$QK-norm synergy means single-factor numbers should be read as context-dependent, not additive.
-  \item \textbf{Single metric.} Final validation loss only --- no downstream-task or generation-quality evaluation, and no measurement of wall-clock cost (Muon and the extra parameters add a small per-step overhead, visible in the logged \texttt{wall\_time\_s} but not analyzed here).
-  \item \textbf{Seeds.} Three seeds give a usable variance estimate; the per-factor std columns show the large effects sit well outside seed noise, while QK-gain and softcap sit inside it.
+  \item \textbf{Scale.} One model size (${\sim}98$M), one corpus (TinyStories, simple, low-entropy text), one short budget (30.72M tokens). The \emph{signs} of the large effects are likely robust, but the inert/harmful verdicts for z-loss and softcap are the components most likely to flip at larger vocab or longer schedules, precisely their design regime. These are the priority for a follow-up.
+  \item \textbf{Fractional design.} Three- and higher-way interactions are not estimated. Main effects and the five targeted pairs are. The strong Muon$\times$QK-norm synergy means single-factor numbers should be read as context-dependent, not additive.
+  \item \textbf{Single quality metric.} Final validation loss only, with no downstream-task or generation-quality evaluation. Wall-clock cost is reported in Section~\ref{sec:cost}, but on one GPU and software stack, so the absolute seconds are environment-specific even though the relative ordering is not.
+  \item \textbf{Seeds.} Three seeds give a usable variance estimate. The per-factor std columns show the large effects sit well outside seed noise, while QK-gain and softcap sit inside it.
 \end{itemize}
 
 \section{Conclusion}
@@ -280,7 +319,10 @@ trailing set of components that are inert (QK-gain, softcap) or mildly
 counterproductive (z-loss) at this scale. The single best configuration is the
 full recipe with z-loss removed. The broader lesson is methodological: stack
 ingredients earn their place against matched, multi-seed pairs and explicit
-interaction tests --- not by accumulation.
+interaction tests, not by accumulation.
+
+\bibliographystyle{plain}
+\bibliography{references}
 
 \appendix
 \section{Reproduction}
@@ -294,6 +336,6 @@ python DataScripts/analyze_results.py       # tables + figures
 Per-run artifacts: \texttt{DataOutput/runs/<run\_id>/\{config.json, log.jsonl,
 summary.json\}}. Aggregated tables and loss-curve figures:
 \texttt{DataOutput/analysis/\{results.csv, main\_effects.csv, interactions.csv,
-summary.md, loss\_curves*.png\}}. All 66 runs completed; 0 diverged.
+summary.md, loss\_curves*.png\}}. All 66 runs completed, 0 diverged.
 
 \end{document}

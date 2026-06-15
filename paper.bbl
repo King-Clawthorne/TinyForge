@@ -1,0 +1,66 @@
+\begin{thebibliography}{10}
+
+\bibitem{chowdhery2023palm}
+Aakanksha Chowdhery, Sharan Narang, Jacob Devlin, et~al.
+\newblock Palm: Scaling language modeling with pathways.
+\newblock {\em Journal of Machine Learning Research}, 24(240):1--113, 2023.
+
+\bibitem{eldan2023tinystories}
+Ronen Eldan and Yuanzhi Li.
+\newblock Tinystories: How small can language models be and still speak
+  coherent english?
+\newblock {\em arXiv preprint arXiv:2305.07759}, 2023.
+
+\bibitem{henry2020qknorm}
+Alex Henry, Prudhvi~Raj Dachapally, Shubham~Shantaram Pawar, and Yuxuan Chen.
+\newblock Query-key normalization for transformers.
+\newblock In {\em Findings of the Association for Computational Linguistics:
+  EMNLP 2020}, pages 4246--4253, 2020.
+
+\bibitem{hsu2024liger}
+Pin-Lun Hsu, Yun Dai, Vignesh Kothapalli, Qingquan Song, Shao Tang, Siyu Zhu,
+  Steven Shimizu, Shivam Sahni, Haowen Ning, and Yanning Chen.
+\newblock Liger kernel: Efficient triton kernels for llm training.
+\newblock {\em arXiv preprint arXiv:2410.10989}, 2024.
+
+\bibitem{jordan2024muon}
+Keller Jordan, Yuchen Jin, Vlado Boza, Jiacheng You, Franz Cesista, Laker
+  Newhouse, and Jeremy Bernstein.
+\newblock Muon: An optimizer for hidden layers in neural networks.
+\newblock \url{https://kellerjordan.github.io/posts/muon/}, 2024.
+
+\bibitem{loshchilov2019adamw}
+Ilya Loshchilov and Frank Hutter.
+\newblock Decoupled weight decay regularization.
+\newblock In {\em International Conference on Learning Representations (ICLR)},
+  2019.
+
+\bibitem{shazeer2020glu}
+Noam Shazeer.
+\newblock Glu variants improve transformer.
+\newblock {\em arXiv preprint arXiv:2002.05202}, 2020.
+
+\bibitem{su2024roformer}
+Jianlin Su, Murtadha Ahmed, Yu~Lu, Shengfeng Pan, Wen Bo, and Yunfeng Liu.
+\newblock Roformer: Enhanced transformer with rotary position embedding.
+\newblock {\em Neurocomputing}, 568:127063, 2024.
+
+\bibitem{touvron2021cait}
+Hugo Touvron, Matthieu Cord, Alexandre Sablayrolles, Gabriel Synnaeve, and
+  Herv\'e J\'egou.
+\newblock Going deeper with image transformers.
+\newblock In {\em Proceedings of the IEEE/CVF International Conference on
+  Computer Vision (ICCV)}, pages 32--42, 2021.
+
+\bibitem{zhang2019rmsnorm}
+Biao Zhang and Rico Sennrich.
+\newblock Root mean square layer normalization.
+\newblock In {\em Advances in Neural Information Processing Systems (NeurIPS)},
+  2019.
+
+\bibitem{zhou2024resformer}
+Zhanchao Zhou, Tianyi Wu, Zhiyun Jiang, Fares Obeid, and Zhenzhong Lan.
+\newblock Value residual learning.
+\newblock {\em arXiv preprint arXiv:2410.17897}, 2024.
+
+\end{thebibliography}
