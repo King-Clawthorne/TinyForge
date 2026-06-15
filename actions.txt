@@ -1,0 +1,80 @@
+ACTIONS — what you need to do, in order
+=======================================
+
+Everything runs from the REPO ROOT (the folder containing simple.py), on the
+GPU machine where torch / liger-kernel / datasets are installed (same env you
+use for simple.py). Nothing else is hands-on: the matrix runner handles all
+22 runs by itself, and it is resumable.
+
+STEP 0a — prepare the data, ONCE (one-time, ~10-30 min, mostly download
++ tokenization; needs network ONLY for this step)
+------------------------------------------------------------------------
+    python DataScripts/prepare_data.py
+
+Writes DataOutput/tokens/{train,val}_8192.bin (~300MB). After this, training
+runs read the local files and never touch the network — no more HF 408
+timeouts mid-run. Re-run only if you change the vocab size or token budget.
+
+STEP 0b — sanity check (seconds, no GPU needed)
+----------------------------------------------
+    python DataScripts/run_matrix.py --dry-run
+
+Expected: prints "22 unique configs x 1 seed(s) = 22 runs" and the run list.
+If this works, the plumbing is fine.
+
+STEP 1 — cheap pilot (recommended, ~1-2 h total)
+------------------------------------------------
+    python DataScripts/run_matrix.py --max-steps 2 --grad-accum 1
+
+Purpose: catches OOM / compile problems / divergence on all 22 configs before
+you commit to the full budget. Watch the first run: the torch.compile step on
+the first config can take 5-10 minutes before any training output appears —
+that is normal, don't kill it.
+
+After the pilot, DELETE the pilot results so the real runs don't get skipped:
+    (PowerShell)  Remove-Item -Recurse -Force DataOutput\runs
+    (bash)        rm -rf DataOutput/runs
+
+STEP 2 — the real matrix (the long one)
+---------------------------------------
+    python DataScripts/run_matrix.py
+
+Defaults: 22 runs x 1000 steps x ~131M tokens each, sequential on one GPU.
+If you have time for error bars (much better for the paper), use 3 seeds:
+    python DataScripts/run_matrix.py --seeds 3        (66 runs)
+
+Hands-on level: zero. Start it and walk away. If anything crashes or the
+machine reboots, just re-run the SAME command — completed runs (those with a
+summary.json) are skipped automatically and it continues where it left off.
+A single diverging run is fine: it stops early, gets flagged, and the matrix
+moves on.
+
+If you hit out-of-memory, two options (combinable):
+  - lower --batch-size and raise --grad-accum to match
+    (e.g. --batch-size 2 --grad-accum 32 keeps tokens/step identical)
+  - add --activation-checkpointing (large activation-memory cut, ~25-30%
+    slower; doesn't change results, applies to every run)
+
+STEP 3 — analysis (minutes)
+---------------------------
+    python DataScripts/analyze_results.py
+
+Writes tables + figures to DataOutput/analysis/ (results.csv, main_effects.csv,
+interactions.csv, summary.md, loss_curves*.png). Plots need matplotlib:
+    pip install matplotlib
+
+STEP 4 — hand back to Claude
+----------------------------
+Tell me the runs are done. I will read DataOutput/ (especially
+analysis/ and the per-run summary.json files) and write the paper.
+Please don't delete or move anything inside DataOutput/ before that.
+
+Notes
+-----
+- The tokenizer (bpe.json) is trained once on first run and cached; later
+  runs reuse it. If you already have a bpe.json from simple.py training on
+  TinyStories, it will be reused — that's intended.
+- Disk: each run writes only small JSON logs (no checkpoints), so DataOutput
+  stays tiny. HuggingFace will cache TinyStories shards on first run.
+- Don't edit files in DataOutput/runs/ by hand; the analysis script reads
+  them as-is.

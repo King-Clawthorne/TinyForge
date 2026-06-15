@@ -20,7 +20,6 @@ import argparse
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.attention.flex_attention import create_block_mask
 from torch.utils.data import Dataset, DataLoader, IterableDataset, get_worker_info
 
 from modules.muon import Muon
@@ -47,33 +46,6 @@ os.environ.setdefault(
     "expandable_segments:True",
 )
 
-def build_document_block_mask(idx, eot_id):
-    """Block-diagonal causal BlockMask for FlexAttention.
-
-    Documents are packed end-to-end and separated by `eot_id` (the eot token is
-    the last token of its document). A token starts a new document iff the
-    previous token was an eot, so a cumulative count of those boundaries gives
-    each token a document id. A query may attend to earlier keys that share its
-    document id — i.e. causal AND same-document.
-
-    Built eagerly (outside the compiled model) and passed into the forward pass;
-    `flex_attention` fuses the mask into the attention kernel. Returns a
-    BlockMask broadcast over heads (H=None).
-    """
-    bsz, seq_len = idx.shape
-    # prev_is_eot[b, i] = (idx[b, i-1] == eot_id), with False at position 0.
-    prev_is_eot = F.pad((idx == eot_id)[:, :-1], (1, 0), value=False)
-    doc_ids = prev_is_eot.cumsum(dim=1)                       # [B, seq]
-
-    def mask_mod(b, h, q_idx, kv_idx):
-        return (q_idx >= kv_idx) & (doc_ids[b, q_idx] == doc_ids[b, kv_idx])
-
-    return create_block_mask(
-        mask_mod, B=bsz, H=None, Q_LEN=seq_len, KV_LEN=seq_len,
-        device=idx.device, _compile=True,
-    )
-
-
 class SimpleTransformerLM(nn.Module):
     def __init__(
         self,
@@ -83,15 +55,22 @@ class SimpleTransformerLM(nn.Module):
         n_heads=12,
         n_embd=768,
         eot_id=None,
+        activation_checkpointing=False,
     ):
         super().__init__()
+
+        # Recompute block activations in backward instead of storing them —
+        # trades ~25-30% step time for a large activation-memory cut. Memory
+        # knob only: gradients are unchanged. Applies to the training path;
+        # cached generation never checkpoints.
+        self.activation_checkpointing = activation_checkpointing
 
         if n_embd % n_heads != 0:
             raise ValueError("n_embd must be divisible by n_heads")
 
-        # Token id that terminates each packed document. When set, the forward
-        # pass builds a block-diagonal document mask so attention never crosses
-        # a document boundary within a packed block.
+        # Token id that terminates each packed document. Kept for reference /
+        # checkpoint compatibility; attention is plain causal (no document
+        # masking), so packed documents do attend across boundaries.
         self.eot_id = eot_id
         self.vocab_size = vocab_size
         self.block_size = block_size
@@ -120,7 +99,7 @@ class SimpleTransformerLM(nn.Module):
         nn.init.normal_(self.token_emb.weight, mean=0.0, std=0.02)
         nn.init.normal_(self.lm_head.weight, mean=0.0, std=0.02)
 
-    def forward(self, idx, block_mask=None, past_kvs=None, use_cache=False, return_hidden=False):
+    def forward(self, idx, past_kvs=None, use_cache=False, return_hidden=False):
         bsz, seq_len = idx.shape
         if seq_len > self.block_size:
             raise ValueError("Sequence length exceeds block_size")
@@ -128,18 +107,26 @@ class SimpleTransformerLM(nn.Module):
         x = self.token_emb(idx)
         new_kvs = [] if use_cache else None
 
-        # Document masking (a FlexAttention BlockMask) is built by the caller and
-        # applies only to the full-context training/eval path. During cached
-        # generation each call extends a single sequence, so the plain causal
-        # SDPA path in Block handles it and block_mask stays None.
+        # Attention is plain causal everywhere (no document masking), which lets
+        # SDPA dispatch to its fused flash / cuDNN backends.
 
         # RoPE cos/sin are shared across all blocks: compute once for this step.
         offset = past_kvs[0][0].size(2) if past_kvs is not None else 0
         cos, sin = self.rope(seq_len, offset=offset)
 
+        checkpointing = (
+            self.activation_checkpointing and self.training
+            and torch.is_grad_enabled() and not use_cache
+        )
         for layer, block in enumerate(self.blocks):
             past_kv = past_kvs[layer] if past_kvs is not None else None
-            x, new_kv = block(x, cos, sin, block_mask=block_mask, past_kv=past_kv, use_cache=use_cache)
+            if checkpointing:
+                x, new_kv = torch.utils.checkpoint.checkpoint(
+                    block, x, cos, sin, past_kv, use_cache,
+                    use_reentrant=False,
+                )
+            else:
+                x, new_kv = block(x, cos, sin, past_kv=past_kv, use_cache=use_cache)
             if use_cache:
                 new_kvs.append(new_kv)
 
@@ -392,7 +379,7 @@ def fused_linear_cross_entropy(hidden, lm_head_weight, targets):
 
 
 
-def estimate_loss(model, val_loader, device, eot_id, eval_iters=20):
+def estimate_loss(model, val_loader, device, eval_iters=20):
     model.eval()
     losses = []
     # Match the training dtype: without autocast the eval forward materializes
@@ -407,9 +394,8 @@ def estimate_loss(model, val_loader, device, eot_id, eval_iters=20):
             # clobbering a tensor that may still be referenced.
             torch.compiler.cudagraph_mark_step_begin()
             xb, yb = xb.to(device, non_blocking=True), yb.to(device, non_blocking=True)
-            block_mask = build_document_block_mask(xb, eot_id) if eot_id is not None else None
             with autocast_ctx:
-                hidden, _ = model(xb, block_mask=block_mask, use_cache=False, return_hidden=True)
+                hidden, _ = model(xb, use_cache=False, return_hidden=True)
                 loss = fused_linear_cross_entropy(hidden, model.lm_head.weight, yb)
             losses.append(loss.item())
 
@@ -420,14 +406,14 @@ def main():
     parser = argparse.ArgumentParser(description="SimpleTransformerLM")
  
     # Training
-    parser.add_argument("--max-steps",    type=int,   default=1000)
+    parser.add_argument("--max-steps",    type=int,   default=999)
     parser.add_argument("--batch-size",   type=int,   default=1)
     parser.add_argument("--block-size",   type=int,   default=2048)
     # DCP writes a directory of shards (not a single file), so the default is a
     # directory name rather than a .pt path.
     parser.add_argument("--checkpoint",   type=str,   default="simple_checkpoint")
     parser.add_argument("--resume",       action="store_true")
-    parser.add_argument("--vocab-size",     type=int, default=32768)
+    parser.add_argument("--vocab-size",     type=int, default=8192)
     # BPE cache; the tokenizer is corpus-specific, so point this at a distinct
     # file when you change DATASET_PATH rather than reusing one trained on
     # another corpus.
@@ -436,6 +422,7 @@ def main():
                         choices=["default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"])
     parser.add_argument("--eval-interval", type=int, default=1)
     parser.add_argument("--grad-accum",   type=int, default=99)
+    parser.add_argument("--activation-checkpointing", action="store_true")
     parser.add_argument("--prompt",       type=str, default="Once upon a time")
 
     args = parser.parse_args()
@@ -522,6 +509,7 @@ def main():
         vocab_size=padded_vocab_size,
         block_size=block_size,
         eot_id=eot_id,
+        activation_checkpointing=args.activation_checkpointing,
     ).to(device)
  
     n_params = sum(p.numel() for p in model.parameters())
@@ -535,7 +523,9 @@ def main():
         from torch._inductor import config as inductor_config, select_algorithm
         select_algorithm.PRINT_AUTOTUNE = False
         inductor_config.max_autotune_report_choices_stats = False
-        model = torch.compile(model, mode=args.compile_mode, fullgraph=True)
+        # checkpoint() introduces graph breaks, so fullgraph must be off then.
+        model = torch.compile(model, mode=args.compile_mode,
+                              fullgraph=not args.activation_checkpointing)
  
     # Hybrid optimizer: Muon for 2D body matrices, AdamW for everything else.
     # AdamW params are split into two groups: 1D/embedding tensors (norms,
@@ -667,9 +657,8 @@ def main():
                 xb = xb.to(device, non_blocking=True)
                 yb = yb.to(device, non_blocking=True)
 
-            block_mask = build_document_block_mask(xb, eot_id) if eot_id is not None else None
             with autocast_ctx:
-                hidden, _ = model(xb, block_mask=block_mask, use_cache=False, return_hidden=True)
+                hidden, _ = model(xb, use_cache=False, return_hidden=True)
                 micro_loss = fused_linear_cross_entropy(hidden, model.lm_head.weight, yb) / args.grad_accum
 
             micro_loss.backward()
@@ -680,7 +669,7 @@ def main():
             opt.step()
 
         if step % eval_interval == 0:
-            val_loss  = estimate_loss(model, val_loader, device, eot_id)
+            val_loss  = estimate_loss(model, val_loader, device)
             peak_alloc = torch.cuda.max_memory_allocated() / 1e9 if device == "cuda" else 0.0
             peak_reserved = torch.cuda.max_memory_reserved() / 1e9 if device == "cuda" else 0.0
             if device == "cuda": torch.cuda.reset_peak_memory_stats()

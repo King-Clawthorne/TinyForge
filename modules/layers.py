@@ -4,7 +4,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributed.tensor  # ensure DTensor is loaded before liger-kernel checks for it
 from torch.nn.attention import sdpa_kernel, SDPBackend
-from torch.nn.attention.flex_attention import flex_attention
 from typing import Optional, Tuple
 
 from liger_kernel.transformers.rms_norm import LigerRMSNorm
@@ -159,7 +158,7 @@ class Block(nn.Module):
         nn.init.normal_(self.proj.weight, mean=0.0, std=0.02 / math.sqrt(2 * n_layers))
         nn.init.normal_(self.w_down.weight, mean=0.0, std=0.02 / math.sqrt(2 * n_layers))
 
-    def forward(self, x, cos, sin, block_mask=None, past_kv=None, use_cache=False):
+    def forward(self, x, cos, sin, past_kv=None, use_cache=False):
         bsz, seq_len, _ = x.shape
 
         residual = x
@@ -187,35 +186,28 @@ class Block(nn.Module):
         # expressed as a plain tensor op SDPA can fuse.
         q = q * self.qk_gain.view(1, self.n_heads, 1, 1).to(q.dtype)
 
-        if block_mask is not None:
-            # Training / eval: FlexAttention applies the block-diagonal document
-            # mask (causal AND same-document) fused directly into the attention
-            # kernel. The BlockMask already encodes causality, so there is no
-            # separate is_causal flag (see the parent's block-mask builder).
-            y = flex_attention(q, k, v, block_mask=block_mask, scale=self.scale)
-        else:
-            # Cached generation: each step extends a single sequence, so a plain
-            # incremental causal mask over the concatenated KV suffices. SDPA's
-            # fused backends handle the short query length better than building a
-            # fresh BlockMask per decode step.
-            attn_mask = None
-            is_causal = True
-            if past_len > 0:
-                total_len = past_len + seq_len
-                query_positions = past_len + torch.arange(seq_len, device=q.device)
-                key_positions = torch.arange(total_len, device=q.device)
-                attn_mask = key_positions.unsqueeze(0) <= query_positions.unsqueeze(1)
-                is_causal = False
+        # Plain causal attention so SDPA can dispatch to its fused flash / cuDNN
+        # backends. During cached generation each step extends a single sequence,
+        # so an explicit incremental causal mask over the concatenated KV is
+        # needed instead of the is_causal flag.
+        attn_mask = None
+        is_causal = True
+        if past_len > 0:
+            total_len = past_len + seq_len
+            query_positions = past_len + torch.arange(seq_len, device=q.device)
+            key_positions = torch.arange(total_len, device=q.device)
+            attn_mask = key_positions.unsqueeze(0) <= query_positions.unsqueeze(1)
+            is_causal = False
 
-            with sdpa_kernel(
-                [SDPBackend.CUDNN_ATTENTION, SDPBackend.FLASH_ATTENTION,
-                 SDPBackend.EFFICIENT_ATTENTION, SDPBackend.MATH],
-                set_priority=True,
-            ):
-                y = F.scaled_dot_product_attention(
-                    q, k, v, attn_mask=attn_mask, dropout_p=0.0,
-                    is_causal=is_causal, scale=self.scale,
-                )
+        with sdpa_kernel(
+            [SDPBackend.CUDNN_ATTENTION, SDPBackend.FLASH_ATTENTION,
+             SDPBackend.EFFICIENT_ATTENTION, SDPBackend.MATH],
+            set_priority=True,
+        ):
+            y = F.scaled_dot_product_attention(
+                q, k, v, attn_mask=attn_mask, dropout_p=0.0,
+                is_causal=is_causal, scale=self.scale,
+            )
 
         y = y.permute(0, 2, 1, 3).contiguous().view(bsz, seq_len, self.n_embd)
         y = self.proj(y)
