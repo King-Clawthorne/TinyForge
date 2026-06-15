@@ -11,6 +11,17 @@ Ronen Eldan and Yuanzhi Li.
   coherent english?
 \newblock {\em arXiv preprint arXiv:2305.07759}, 2023.
 
+\bibitem{geiping2023cramming}
+Jonas Geiping and Tom Goldstein.
+\newblock Cramming: Training a language model on a single gpu in one day.
+\newblock In {\em Proceedings of the 40th International Conference on Machine
+  Learning (ICML)}, pages 11117--11143, 2023.
+
+\bibitem{gemma2}
+{Gemma Team, Google DeepMind}.
+\newblock Gemma 2: Improving open language models at a practical size.
+\newblock {\em arXiv preprint arXiv:2408.00118}, 2024.
+
 \bibitem{henry2020qknorm}
 Alex Henry, Prudhvi~Raj Dachapally, Shubham~Shantaram Pawar, and Yuxuan Chen.
 \newblock Query-key normalization for transformers.
@@ -34,6 +45,15 @@ Ilya Loshchilov and Frank Hutter.
 \newblock Decoupled weight decay regularization.
 \newblock In {\em International Conference on Learning Representations (ICLR)},
   2019.
+
+\bibitem{narang2021transfer}
+Sharan Narang, Hyung~Won Chung, Yi~Tay, Liam Fedus, Thibault Fevry, Michael
+  Matena, Karishma Malkan, Noah Fiedel, Noam Shazeer, Zhenzhong Lan, Yanqi
+  Zhou, Wei Li, Nan Ding, Jake Marcus, Adam Roberts, and Colin Raffel.
+\newblock Do transformer modifications transfer across implementations and
+  applications?
+\newblock In {\em Proceedings of the 2021 Conference on Empirical Methods in
+  Natural Language Processing (EMNLP)}, 2021.
 
 \bibitem{shazeer2020glu}
 Noam Shazeer.
