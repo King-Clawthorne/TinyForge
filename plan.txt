@@ -1,8 +1,0 @@
-My plan: The interaction study, but framed as an architecture paper
-
-Nobody has published a systematic factorial study of how modern training-recipe components interact at small scale:
-Muon × QK-norm, LayerScale × depth-wise residual schemes (AttnRes/mHC/value residual), z-loss × softcap × QK-gain.
-Every one of these papers ablates its own component against a vanilla baseline; none ablate against each other's components.
-A paper titled something like "Which modern transformer tricks are redundant?" with a clean 100M-param factorial design would
-be novel, useful, citable, and impossible for me to be scooped on by accident — because the contribution is the experimental matrix,
-not a single idea someone else can independently invent. This is my strongest option and I already have the platform built.
