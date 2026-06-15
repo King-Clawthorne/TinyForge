@@ -24,7 +24,7 @@ A Controlled Ablation on TinyStories}
 Contemporary language-model training stacks bundle a long list of small
 architectural and optimization tweaks, namely Muon, QK-norm, learnable QK-gain,
 LayerScale, value residuals, z-loss, and logit softcapping, and present them as a
-single ``modern recipe.'' We disentangle this bundle with a controlled,
+single ``modern recipe.'' I disentangle this bundle with a controlled,
 multi-seed ablation. A fixed ${\sim}97.6$M-parameter decoder-only transformer is
 trained on TinyStories under an identical token budget (30.72M tokens, 1000
 steps) across 22 configurations $\times$ 3 seeds $=$ 66 runs, structured as a
@@ -63,30 +63,30 @@ contribute to validation loss, and do the components interact?}
 The closest precedent is Narang et al.~\cite{narang2021transfer}, who ran a
 large shared-setting sweep over many proposed Transformer modifications and found
 that most do not transfer: the gains often came from the original codebase rather
-than the idea, and few changes helped across tasks. We share their motivation,
+than the idea, and few changes helped across tasks. I share their motivation,
 that recipe ingredients should be judged in a controlled setting rather than
 trusted by reputation, but differ in focus. Their study spans architectures and
-tasks at fixed scale to ask which modifications generalize. Ours fixes a single
-backbone, corpus, and token budget and instead resolves the \emph{interactions}
-within one contemporary stack, isolating that the bulk of its advantage lives in
-a single Muon $\times$ QK-norm pair rather than spreading across the seven
-toggles. The components we test are all recent and postdate that survey, namely
-Muon~\cite{jordan2024muon}, QK-norm~\cite{henry2020qknorm},
+tasks at fixed scale to ask which modifications generalize. This study fixes a
+single backbone, corpus, and token budget and instead resolves the
+\emph{interactions} within one contemporary stack, isolating that the bulk of its
+advantage lives in a single Muon $\times$ QK-norm pair rather than spreading
+across the seven toggles. The components I test are all recent and postdate that
+survey, namely Muon~\cite{jordan2024muon}, QK-norm~\cite{henry2020qknorm},
 LayerScale~\cite{touvron2021cait}, value residuals~\cite{zhou2024resformer}, and
 the z-loss and logit-softcap stabilizers of PaLM~\cite{chowdhery2023palm} and
-Gemma~2~\cite{gemma2}. Methodologically we adopt a fractional factorial design with matched
+Gemma~2~\cite{gemma2}. Methodologically I adopt a fractional factorial design with matched
 on/off pairs and explicit $2\times2$ interaction cells, which lets a small run
 budget estimate both main effects and the targeted interactions that a
 one-factor-at-a-time sweep would miss.
 
-Our compute-constrained, single-GPU regime follows a line of work on small-scale
+This compute-constrained, single-GPU regime follows a line of work on small-scale
 language-model training, most directly Cramming~\cite{geiping2023cramming}, which
 re-examined the full pretraining pipeline under a one-day single-GPU budget, and
 the TinyStories corpus~\cite{eldan2023tinystories}, whose low-entropy synthetic
 text makes ${\sim}10^2$M-parameter models trainable to coherence in a short
-schedule. That regime is what lets us afford 66 runs, but it also bounds our
+schedule. That regime is what lets me afford 66 runs, but it also bounds my
 claims: it is precisely the short-schedule, small-vocab setting in which
-stability components such as z-loss are expected to be inert, a caveat we return
+stability components such as z-loss are expected to be inert, a caveat I return
 to in the discussion.
 
 \section{The components under study}
