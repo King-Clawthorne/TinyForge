@@ -234,12 +234,16 @@ majority.
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=\linewidth]{DataOutput/analysis/loss_curves_anchors.png}
-\caption{Validation-loss curves for the anchor configurations (all-off AdamW
-baseline and all-on full Muon recipe, bold) and the leave-one-out runs (full
-recipe with one toggle removed). The full-recipe band separates cleanly from the
-baseline early and holds the gap for the rest of training; the highest
-leave-one-out trajectory is the one dropping QK-norm.}
+\includegraphics[width=\linewidth]{DataOutput/analysis/loss_curves_paper.png}
+\caption{Validation-loss curves, one line per configuration (mean over 3 seeds,
+with a shaded min--max band; the bands are narrow because seed spread, std
+${\approx}0.003$--$0.008$ nats, is small next to the between-config gaps) for the
+two anchors --- the all-off AdamW baseline (dashed black) and the all-on full
+Muon recipe (green) --- and the leave-one-out runs (full recipe with one
+component removed, labelled by the dropped component). The full recipe separates
+from the baseline early and holds the gap throughout; among the leave-one-outs,
+dropping Muon or QK-norm is by far the most damaging, while dropping z-loss
+slightly \emph{improves} on the full recipe.}
 \label{fig:curves}
 \end{figure}
 
