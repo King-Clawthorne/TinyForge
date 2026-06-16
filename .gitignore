@@ -2,6 +2,7 @@ __pycache__/
 modules/__pycache__/
 venv/
 *.pt
+simple_checkpoint/
 *bpe.json
 bpe_*.json
 DataOutput/*

@@ -1,0 +1,72 @@
+--- Generating Sample Text ---
+
+[top_k=40]
+Once upon a time, there was a kind and compassionate girl named Lily. She lived in a small house with her mom and dad. Lily loved to help her family and friends.
+
+One day, Lily's mom asked her to clean their house. Lily said, "I will do it, Mommy!" She took a broom and started to clean the windows. She cleaned and cleaning until the house looked nice and new.
+
+Lily's mom was so happy and grateful for her daughter's help. She said, "Thank you, Lily! You are such a good helper." Lily smiled and felt proud inside for cleaning the broken window. And from that day on, Lily always tried to be compassionate and help others.
+
+[top_p=0.9]
+Once upon a time, there was a little girl named Lily. One day, Lily's mommy said, "Lily, it's time to take a bath." Lily didn't want to take a bath because she loved playing with her toys. But Mommy said, "Please be brave and give me a bath to make sure we have fun later."
+
+Lily got into the bath and played with her rubber duck. After a little while, Mommy wrapped it in a soft towel and gave it a massage. Lily felt so relaxed and happy. After the bath, Lily's mommy dried her off and said, "Now it's time for a haircut."
+
+Lily's daddy was a fisherman and he had a big boat. He helped people to catch fish. But then the wind started to blow really hard. It was so strong that it made the water splash very high. Lily got scared and held onto her daddy tight.
+
+Finally, the wind stopped and the sun came out. Lily and her family went home, tired but happy. They had a great day at the pond.
+
+[min_p=0.05]
+Once upon a time, there was a little girl named Lily. One day, she went to the park with her mom. It was very hot outside, so they brought a cooler full of yummy snacks and drinks to eat at.
+
+While playing on the swings, Lily saw a butterfly flying around. She wanted to catch it, but it flew away too fast. "Mommy, the butterfly is gone," Lily said. "Let's go home and have some ice cream," her mom replied.
+
+Lily felt happy and excited to get her favorite treat from the cooler. As they walked home, they saw a man who looked sad. "What's wrong?" Lily asked him. The man explained that he lost his wallet and didn't know what to do. Lily had an idea! "I can help you find it," she said. They searched and found the wallet together. The man was so grateful that he gave Lily a big hug.
+
+From that day on, whenever Lily went to the park, she always remembered to be kind and helpful to others. And she never forgot the time she met the sad man and made him smile.
+
+[top_p=0.9 + min_p=0.05]
+Once upon a time, there was a little girl named Lily. She loved to play outside and run around. One day, she saw her mommy's makeup and wanted to try some on.
+
+Lily asked her mommy, "Can I use your makeup, please?"
+
+Her mommy said, "No, Lily. You are too little to use makeup. It's not safe."
+
+Lily felt sad but didn't give up. She decided to wait until her mommy was busy in the kitchen. After a while, her mommy came home and Lily was so happy to get her makeup.
+
+From then on, Lily learned that it's important to listen to grown-ups and wait for good things to do.
+
+[RepPenalty=1.2]
+Once upon a time there was a little girl who loved to read. She had many books in her room, but one day she found something strange. It looked like an unusual thing and she couldn't figure out what it was.
+
+She asked her mom, "Mommy, what is this?"
+
+Her mother smiled and replied, "It's an old book. Someone must have put it in the library because it looks old."
+
+The little girl was very excited and she wanted to read it. She brought the book to school and everyone was so happy to see her. They all thanked her for finding the mysterious book.
+
+The little girl smiled, feeling proud of herself. Now she could enjoy the story whenever she wanted!
+
+[Temp=0.5]
+Once upon a time, there was a little girl named Lily. She loved to play outside in the snow. One day, she saw her friend Timmy playing with his toy cars.
+
+"Hi Timmy!" said Lily.
+
+"Hi Lily," said Timmy. "Do you want to play with me?"
+
+Lily nodded her head and they started to build a snowman together. They used a carrot for the snowman's nose and coal for the eyes.
+
+After they finished playing, they went inside to warm up by the fire. They drank hot cocoa and watched the flames dance around the room.
+
+"The fire is so pretty," said Lily. "I'm glad we played together."
+
+"Me too," said Timmy. "We should always be kind to each other."
+
+And from that day on, Lily and Timmy were the best of friends and always remembered to be kind to each other.
+
+[Temp=1.5]
+Once upon a time there was a rabbit named Rup were collecting wood. Little permitted attracting to landscape. He arrived lunchlight Lola politely at micree minutes. Qu pink water started to pepperoni quickly pies quacked in response easeAnna opened brace squealed with glee!
+ windy finally said Ben hadn't subHarryning train: why failed joy aren't quizthy of motion or reversing? That Sadie the robin towards close carrot deloodPeople Itâ€™s bouquet â€” and their afternoon nap complexibleings. Treen temperature appeared on spicy explode behind Lola realised she had adventurouswn perfectly if wisely.
+ fills her week reminder onesitting interestingty lessons. It became one day that prevented adults from anels run she chose isas five cobwebs day fireflies! anyone knowslier floors mail from miles ag vaseience! count spun each bubble Matt twirlches, dust as entsemble have disappeared into action.
+
+SœWow! Lucy knows chooborica secrets are decorating. awful reminder neither turns imagine unexpected places like problem - Billjamoonantels responsibly yields endeds in vain. So wisely Daisy continue to pay â words department angry ad lending lasers into greeting mermaids â€œ copy coot wave bucket interesting swirl chuggel permit so built
