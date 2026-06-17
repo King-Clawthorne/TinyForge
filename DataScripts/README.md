@@ -52,6 +52,29 @@ A single configuration can also be run directly, e.g.:
 python DataScripts/train_ablation.py --optimizer muon --qk-norm --z-loss
 ```
 
+## Verdict-flip sweep (z-loss / softcap)
+
+The main matrix fixes scale, schedule, and vocab at one operating point, where
+z-loss and the tanh logit softcap come out inert-to-harmful — expected, since
+both are output-softmax stabilizers and an 8k-vocab / 1000-step softmax has
+little log-sum-exp blowup to stabilize. `flip_sweep.py` finds *where the verdict
+flips* by replicating the z-loss × softcap 2×2 along the three axes that drive
+logit magnitude:
+
+```bash
+# vocab is the dominant lever (8192 → 65536); --auto-prepare tokenizes
+# any missing vocab (downloads are cached after the first time)
+python DataScripts/flip_sweep.py --axis vocab --auto-prepare
+python DataScripts/flip_sweep.py --axis all        # also schedule + scale
+python DataScripts/flip_analyze.py                 # per-regime effects + flip point
+```
+
+Runs land in `DataOutput/flip_runs/` (separate from the main matrix, so
+`analyze_results.py` is unaffected). `flip_analyze.py` writes
+`analysis/flip_effects.csv` and prints, per axis, the z-loss/softcap main effect
+at each regime (Δ final val loss, ON−OFF; negative = useful) and the first
+regime where each crosses into "useful".
+
 ## Outputs (`DataOutput/`)
 
 - `matrix_manifest.json` — the full experiment matrix
