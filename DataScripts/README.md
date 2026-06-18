@@ -8,7 +8,7 @@ components interact at ~100M-parameter scale. All outputs land in
 ## Factors under study (all binary)
 
 | factor | OFF | ON |
-|---|---|---|
+| --- | --- | --- |
 | `optimizer` | pure AdamW | Muon (2D body) + AdamW hybrid |
 | `qk_norm` | — | per-head RMSNorm on q/k (Gemma 2) |
 | `qk_gain` | — | learnable per-head attention-score gain |
