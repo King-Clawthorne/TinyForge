@@ -62,12 +62,19 @@ flips* by replicating the z-loss × softcap 2×2 along the three axes that drive
 logit magnitude:
 
 ```bash
-# vocab is the dominant lever (8192 → 65536); --auto-prepare tokenizes
+# vocab is the dominant lever (8192 → 32768); --auto-prepare tokenizes
 # any missing vocab (downloads are cached after the first time)
 python DataScripts/flip_sweep.py --axis vocab --auto-prepare
 python DataScripts/flip_sweep.py --axis all        # also schedule + scale
 python DataScripts/flip_analyze.py                 # per-regime effects + flip point
 ```
+
+The vocab axis tops out at 32768: BPE on TinyStories saturates at ~26.9k
+tokens (only ~20.5k unique pre-tokenized words), so a larger target vocab is
+backed by the identical tokenizer and is not a distinct regime. The other axes
+are `schedule` (max-steps 500 → 4000) and `scale` (4×4×256 → 16×16×1024). The
+sweep is resumable and continues past a failed cell, so a re-run fills only the
+gaps.
 
 Runs land in `DataOutput/flip_runs/` (separate from the main matrix, so
 `analyze_results.py` is unaffected). `flip_analyze.py` writes
@@ -93,6 +100,9 @@ regime where each crosses into "useful".
 - `train_ablation.py` — one training run; reuses the data pipeline from `simple.py`
 - `run_matrix.py` — builds + executes the experiment matrix (resumable)
 - `analyze_results.py` — tables, interaction analysis, figures
+- `flip_sweep.py` — z-loss / softcap verdict-flip sweep over vocab, schedule, scale (resumable)
+- `flip_analyze.py` — per-regime z-loss/softcap main effects + the flip point
+- `prepare_data.py` — download + BPE-tokenize TinyStories to `DataOutput/tokens/*.bin`
 
 Diverged runs (non-finite loss) stop early, are flagged in `summary.json`,
 and are excluded from effect/interaction estimates — divergence itself is a

@@ -13,7 +13,8 @@ does the verdict flip from "harmful/inert" to "useful"? It replicates the
 z-loss x softcap 2x2 cell across a small one-factor-at-a-time grid over the
 three axes that drive logit magnitude:
 
-  - vocab    : 8192 -> 16384 -> 32768 -> 65536   (the dominant lever)
+  - vocab    : 8192 -> 16384 -> 32768   (the dominant lever; BPE on
+               TinyStories saturates at ~26.9k, so 32768 is the top point)
   - schedule : max-steps 500 -> 1000 -> 2000 -> 4000
   - scale    : (n_layers, n_heads, n_embd) tiers
 
@@ -65,7 +66,10 @@ BASE = {
 # One-factor-at-a-time grids. The base value of each axis is included so every
 # sweep shares the base corner (and so the base 2x2 is computed once).
 AXES = {
-    "vocab":    {"vocab_size": [8192, 16384, 32768, 65536]},
+    # BPE on TinyStories saturates at ~26.9k tokens (only ~20.5k unique
+    # pre-tokenized words), so 32768 already hits the ceiling and 65536 would
+    # be backed by the identical tokenizer. 32768 is the top distinct point.
+    "vocab":    {"vocab_size": [8192, 16384, 32768]},
     "schedule": {"max_steps":  [500, 1000, 2000, 4000]},
     # Scale tiers keep n_embd divisible by n_heads and head_dim sensible.
     "scale":    {"scale_tier": [
