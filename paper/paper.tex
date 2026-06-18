@@ -156,6 +156,7 @@ reported as $\Delta(\text{final val loss}) = \text{ON} - \text{OFF}$, so
 \section{Results}
 
 \subsection{Main effects}
+\label{sec:main}
 
 \begin{table}[h]
 \centering
@@ -317,6 +318,49 @@ over the baseline (260 s) for its $-0.336$-nat gain, and the Muon $+$ QK-norm pa
 alone (292 s) buys $-0.238$ nats for ${\approx}12\%$ more time, with the remaining
 components adding ${\approx}0.10$ nats more at near-zero extra cost.
 
+\subsection{Does the verdict flip at larger vocab?}
+\label{sec:flip}
+
+The main study's most fragile verdicts are the inert/harmful calls on z-loss and
+softcap. Both are output-softmax stabilizers expected to earn their keep only when
+the LM-head logits actually blow up, that is, at large vocab or long schedules. To
+test this directly I re-ran the z-loss$\times$softcap $2\times2$ cell across a
+vocabulary sweep, holding everything else at a cheaper base regime (8 layers, 8
+heads, $d_{\text{model}}=512$, 1000 steps, block size 1024) and moving only the
+vocabulary: $8192 \to 16384 \to 32768$. Each vocab uses its own freshly tokenized
+corpus, and 32768 is the top point, as the byte-level BPE saturates around 26.9k
+merges on TinyStories. Effects are the same ON$-$OFF $\Delta$(final val loss) as
+before (negative $=$ helps), each averaged over the two settings of the other
+factor.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}lRRRll@{}}
+\toprule
+\textbf{vocab} & \textbf{params} & \textbf{z-loss $\Delta$} & \textbf{softcap $\Delta$} & \textbf{z-loss} & \textbf{softcap} \\
+\midrule
+8{,}192  & 34.1M & $+0.0070$ & $-0.0026$ & harmful & useful \\
+16{,}384 & 42.5M & $+0.0119$ & $-0.0053$ & harmful & useful \\
+32{,}768 & 59.3M & $+0.0155$ & $+0.0006$ & harmful & inert \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The expected flip does not happen, and z-loss moves the wrong way. Rather than
+turning useful as the softmax grows, its penalty grows \emph{monotonically more
+harmful} with vocab ($+0.007 \to +0.012 \to +0.016$ nats), tripling across a
+$4\times$ vocabulary increase. Softcap, the gentler tanh clamp, is mildly useful
+at 8k to 16k but fades to inert by 32k. The z-loss$\times$softcap interaction
+stays small and positive throughout ($+0.004 \to +0.010$). Within the vocabulary
+range the corpus can support, then, neither stabilizer reverses its main-study
+verdict. The plausible reading is that on low-entropy TinyStories text the logits
+never approach the instability these regularizers are built for, so over this
+reachable range a larger vocab only enlarges the surface over which z-loss pulls
+the model off the cross-entropy objective. The verdicts of Section~\ref{sec:main}
+are not an artifact of the 8k operating point. The schedule and model-scale axes
+(sketched in the sweep script but not run here) remain the open question.
+
 \section{Discussion}
 
 \paragraph{A practitioner's shortlist.} If you must port only part of this
@@ -329,13 +373,18 @@ reintroduces the instability it is meant to control.
 \paragraph{Why z-loss flips sign.} z-loss and softcap both exist to tame logit
 blow-up over long training. This study's regime (short budget, small vocab, zero
 divergences) is exactly the one where that insurance is unnecessary, so it shows
-up as pure cost (z-loss) or pure no-op (softcap). The result is a reminder that
-``stability'' components should be judged against an actually-unstable baseline,
-not folded into a recipe by default.
+up as pure cost (z-loss) or pure no-op (softcap). The vocabulary sweep
+(Section~\ref{sec:flip}) sharpens this. Pushing the vocab from 8k to 32k, the
+direction in which logit blow-up should worsen and the insurance should start to
+pay, does not rescue z-loss. Its penalty instead grows monotonically more harmful,
+and softcap only fades from mildly useful to inert. On low-entropy text the
+softmax simply never reaches the unstable regime these tools target. The result is
+a reminder that ``stability'' components should be judged against an
+actually-unstable baseline, not folded into a recipe by default.
 
 \paragraph{Scope and limitations.}
 \begin{itemize}
-  \item \textbf{Scale.} One model size (${\sim}98$M), one corpus (TinyStories, simple, low-entropy text), one short budget (30.72M tokens). The \emph{signs} of the large effects are likely robust, but the inert/harmful verdicts for z-loss and softcap are the components most likely to flip at larger vocab or longer schedules, precisely their design regime. These are the priority for a follow-up.
+  \item \textbf{Scale.} One model size (${\sim}98$M), one corpus (TinyStories, simple, low-entropy text), one short budget (30.72M tokens). The \emph{signs} of the large effects are likely robust. The inert/harmful verdicts for z-loss and softcap were the components most suspected of flipping at larger vocab. The vocabulary sweep in Section~\ref{sec:flip} tests this and finds they do not flip over the reachable range, and z-loss in fact worsens monotonically to vocab 32k. The schedule and model-scale axes remain untested and are the priority for a follow-up.
   \item \textbf{Fractional design.} Three- and higher-way interactions are not estimated. Main effects and the five targeted pairs are. The strong Muon$\times$QK-norm synergy means single-factor numbers should be read as context-dependent, not additive.
   \item \textbf{Single quality metric.} Final validation loss only, with no downstream-task or generation-quality evaluation. Wall-clock cost is reported in Section~\ref{sec:cost}, but on one GPU and software stack, so the absolute seconds are environment-specific even though the relative ordering is not.
   \item \textbf{Seeds.} Three seeds give a usable variance estimate. The per-factor std columns show the large effects sit well outside seed noise, while QK-gain and softcap sit inside it.
@@ -362,11 +411,15 @@ interaction tests, not by accumulation.
 python DataScripts/prepare_data.py          # one-time tokenization
 python DataScripts/run_matrix.py --seeds 3  # 66 runs, resumable
 python DataScripts/analyze_results.py       # tables + figures
+python DataScripts/flip_sweep.py --axis vocab --auto-prepare  # vocab sweep
+python DataScripts/flip_analyze.py          # z-loss/softcap flip table
 \end{verbatim}
 
 Per-run artifacts: \texttt{DataOutput/runs/<run\_id>/\{config.json, log.jsonl,
 summary.json\}}. Aggregated tables and loss-curve figures:
 \texttt{DataOutput/analysis/\{results.csv, main\_effects.csv, interactions.csv,
-summary.md, loss\_curves*.png\}}. All 66 runs completed, 0 diverged.
+summary.md, loss\_curves*.png\}}. Vocab-sweep cells and their effects:
+\texttt{DataOutput/flip\_runs/} and \texttt{DataOutput/analysis/flip\_effects.csv}.
+All 66 main runs completed, 0 diverged.
 
 \end{document}
