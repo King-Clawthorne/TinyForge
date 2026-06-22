@@ -9,8 +9,11 @@
 \usepackage{graphicx}
 \usepackage{hyperref}
 \hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue, citecolor=blue}
+\usepackage{seqsplit}
+% Breakable monospace for long file paths
+\newcommand{\bpath}[1]{\texttt{\seqsplit{#1}}}
 
-\newcolumntype{R}{>{\raggedleft\arraybackslash}p{1.6cm}}
+\newcolumntype{R}{>{\raggedleft\arraybackslash}p{1.9cm}}
 
 \title{Which Parts of the ``Modern Transformer Recipe'' Actually Matter?\\
 A Controlled Ablation on TinyStories}
@@ -415,11 +418,11 @@ python DataScripts/flip_sweep.py --axis vocab --auto-prepare  # vocab sweep
 python DataScripts/flip_analyze.py          # z-loss/softcap flip table
 \end{verbatim}
 
-Per-run artifacts: \texttt{DataOutput/runs/<run\_id>/\{config.json, log.jsonl,
+Per-run artifacts: \bpath{DataOutput/runs/<run\_id>/\{config.json, log.jsonl,
 summary.json\}}. Aggregated tables and loss-curve figures:
-\texttt{DataOutput/analysis/\{results.csv, main\_effects.csv, interactions.csv,
+\bpath{DataOutput/analysis/\{results.csv, main\_effects.csv, interactions.csv,
 summary.md, loss\_curves*.png\}}. Vocab-sweep cells and their effects:
-\texttt{DataOutput/flip\_runs/} and \texttt{DataOutput/analysis/flip\_effects.csv}.
+\bpath{DataOutput/flip\_runs/} and \bpath{DataOutput/analysis/flip\_effects.csv}.
 All 66 main runs completed, 0 diverged.
 
 \end{document}
